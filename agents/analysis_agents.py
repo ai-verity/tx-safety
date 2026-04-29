@@ -5,10 +5,10 @@ Analysis Agents:
 """
 from __future__ import annotations
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
 from agents.base import BaseAgent
-from core.database import get_active_incidents, get_recent_incidents, upsert_incident, get_stats
+from core.database import get_active_incidents, get_recent_incidents, upsert_incident, get_stats, get_all_agent_statuses
 from core.models import Incident, Severity, IncidentType
 from core.llm import chat_json
 from core.ws_manager import manager
@@ -60,8 +60,8 @@ class ThreatClassifierAgent(BaseAgent):
                         source=item.get("source", ""),
                         source_url=item.get("source_url"),
                         active=True,
-                        reported_at=datetime.fromisoformat(item["reported_at"]),
-                        updated_at=datetime.utcnow(),
+                        reported_at=datetime.fromisoformat(item.get("reported_at") or datetime.now(timezone.utc).isoformat()),
+                        updated_at=datetime.now(timezone.utc),
                         lat=item.get("lat"),
                         lon=item.get("lon"),
                     )
@@ -74,7 +74,7 @@ class ThreatClassifierAgent(BaseAgent):
                     logger.info(f"[classifier] upgraded {item['id'][:8]} to {new_sev.value}")
                     count += 1
             except Exception as e:
-                logger.debug(f"[classifier] error: {e}")
+                logger.warning(f"[classifier] error processing {item.get('id','?')[:8]}: {type(e).__name__}: {e}")
 
         return count
 
@@ -116,7 +116,8 @@ class TrendAgent(BaseAgent):
 
         # Broadcast full active incident list for map refresh
         active = await get_active_incidents(300)
-        await manager.broadcast("full_refresh", {"incidents": active, "stats": stats})
+        agents = await get_all_agent_statuses()
+        await manager.broadcast("full_refresh", {"incidents": active, "stats": stats, "agents": agents})
 
         return len(recent)
 

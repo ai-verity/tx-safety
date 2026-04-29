@@ -48,6 +48,7 @@ TX_OPEN_DATA = [
 ]
 
 _seen: set[str] = set()
+_SEEN_MAX = 5000
 
 # Reddit needs a browser-like UA to avoid 403/429
 REDDIT_HEADERS = {
@@ -98,6 +99,8 @@ class SocialAgent(BaseAgent):
                 eid   = self._make_id(d.get("id", text[:80]))
                 if eid in _seen:
                     continue
+                if len(_seen) >= _SEEN_MAX:
+                    _seen.clear()
                 _seen.add(eid)
                 items.append(RawItem(
                     source=name,
@@ -127,6 +130,8 @@ class SocialAgent(BaseAgent):
                 eid = self._make_id(getattr(entry, "id", getattr(entry, "title", "")))
                 if eid in _seen:
                     continue
+                if len(_seen) >= _SEEN_MAX:
+                    _seen.clear()
                 _seen.add(eid)
                 text = f"[{name}] {getattr(entry,'title','')}. {getattr(entry,'summary','')}"[:2000]
                 items.append(RawItem(source=name, raw_text=text, url=getattr(entry, "link", None)))
@@ -161,6 +166,8 @@ class SocialAgent(BaseAgent):
                 eid = self._make_id(text[:120])
                 if eid in _seen:
                     continue
+                if len(_seen) >= _SEEN_MAX:
+                    _seen.clear()
                 _seen.add(eid)
                 items.append(RawItem(source=name, raw_text=text))
         except Exception as e:

@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from core.models import AgentStatus
 from core.database import upsert_agent_status
 
@@ -33,7 +33,7 @@ class BaseAgent(ABC):
 
     async def _set_status(self, status: str, error: str | None = None):
         self.status.status = status
-        self.status.last_run = datetime.utcnow()
+        self.status.last_run = datetime.now(timezone.utc)
         self.status.error = error
         try:
             await upsert_agent_status(self.status)

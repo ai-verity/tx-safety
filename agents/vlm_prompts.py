@@ -11,7 +11,7 @@ Model (VLM):
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -418,6 +418,7 @@ def build_vlm_prompt(incident: dict, persona_key: str) -> dict:
     location_str = f"{city}{', ' + county + ' County' if county else ''}, Texas"
 
     reported_at = incident.get("reported_at", "")
+    reported_at_iso = str(reported_at) if reported_at else ""
     try:
         dt = datetime.fromisoformat(str(reported_at).replace("Z", "+00:00"))
         time_str = dt.strftime("%B %d, %Y at %H:%M CDT")
@@ -508,6 +509,7 @@ Provide your structured analysis now. Flag any P1-level observations (imminent t
         "user_prompt": user_prompt,
         "metadata": {
             "reported_at": time_str,
+            "reported_at_iso": reported_at_iso,
             "source": source,
             "scene_context": cues["scene"],
             "time_sensitivity": cues["time_sensitivity"],
@@ -632,3 +634,18 @@ def generate_all_prompts(incidents: list[dict]) -> list[dict]:
 def generate_persona_prompts(incidents: list[dict], persona_key: str) -> list[dict]:
     """Generate prompts for one persona across all incidents."""
     return [build_vlm_prompt(i, persona_key) for i in incidents]
+
+
+def demo_incidents() -> list[dict]:
+    """Representative demo incidents used when the DB has no recent data."""
+    now = datetime.now(timezone.utc).isoformat()
+    return [
+        {"id":"demo-001","title":"Officer-involved shooting near downtown intersection","incident_type":"Shooting","severity":"P1","city":"Houston","county":"Harris","description":"Reports of gunfire at the intersection of Main St and Commerce St. Multiple units responding. Suspect fled on foot northbound.","active":True,"reported_at":now,"source":"demo"},
+        {"id":"demo-002","title":"Multi-vehicle accident blocks I-35 northbound","incident_type":"Vehicle Accident","severity":"P2","city":"Austin","county":"Travis","description":"Three-car collision blocking two northbound lanes near exit 238. One vehicle on fire. EMS en route.","active":True,"reported_at":now,"source":"demo"},
+        {"id":"demo-003","title":"Structure fire at commercial warehouse","incident_type":"Fire","severity":"P2","city":"Dallas","county":"Dallas","description":"Large smoke column visible from warehouse on Industrial Blvd. Multiple fire units on scene. Evacuation of surrounding businesses ordered.","active":True,"reported_at":now,"source":"demo"},
+        {"id":"demo-004","title":"Suspicious package reported at city hall","incident_type":"Suspicious Activity","severity":"P2","city":"San Antonio","county":"Bexar","description":"Unattended bag reported near the main entrance of city hall. Building being evacuated as precaution. Bomb squad notified.","active":True,"reported_at":now,"source":"demo"},
+        {"id":"demo-005","title":"Hazmat spill on State Highway 6","incident_type":"Hazmat","severity":"P2","city":"Houston","county":"Harris","description":"Chemical tanker rollover on SH-6 southbound. Unknown substance leaking. 500-ft exclusion zone established.","active":True,"reported_at":now,"source":"demo"},
+        {"id":"demo-006","title":"Aggravated assault outside nightclub","incident_type":"Assault","severity":"P3","city":"Fort Worth","county":"Tarrant","description":"Victim transported to hospital after altercation outside venue on West 7th. Suspect described as male, 6ft, dark jacket.","active":False,"reported_at":now,"source":"demo"},
+        {"id":"demo-007","title":"Missing juvenile last seen at Riverwalk","incident_type":"Missing Person","severity":"P2","city":"San Antonio","county":"Bexar","description":"14-year-old female missing from River Walk area since 6 PM. Last seen near Arneson River Theatre.","active":True,"reported_at":now,"source":"demo"},
+        {"id":"demo-008","title":"Flash flood warning issued for low-water crossings","incident_type":"Natural Disaster","severity":"P3","city":"Austin","county":"Travis","description":"NWS issued flash flood warning for Travis County through midnight. Multiple low-water crossings closed.","active":True,"reported_at":now,"source":"demo"},
+    ]

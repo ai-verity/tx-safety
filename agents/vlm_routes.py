@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from core.database import get_recent_incidents
-from agents.vlm_prompts import generate_all_prompts, generate_persona_prompts, build_vlm_prompt, PERSONAS
+from agents.vlm_prompts import generate_all_prompts, generate_persona_prompts, build_vlm_prompt, PERSONAS, demo_incidents
 
 router = APIRouter(prefix="/api/vlm", tags=["vlm"])
 
@@ -30,8 +30,10 @@ async def get_vlm_prompts(
     incidents = await get_recent_incidents(hours=hours, limit=limit)
     if severity:
         incidents = [i for i in incidents if i.get("severity") == severity.upper()]
+    using_demo = False
     if not incidents:
-        return {"count": 0, "prompts": [], "message": f"No incidents in last {hours}h"}
+        incidents = demo_incidents()
+        using_demo = True
     if persona:
         if persona not in PERSONAS:
             raise HTTPException(400, detail=f"Unknown persona. Valid: {list(PERSONAS.keys())}")
@@ -43,6 +45,7 @@ async def get_vlm_prompts(
         "incident_count": len(incidents),
         "hours_window": hours,
         "personas": list(PERSONAS.keys()) if not persona else [persona],
+        "demo": using_demo,
         "prompts": prompts,
     }
 

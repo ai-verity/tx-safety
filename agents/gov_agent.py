@@ -42,6 +42,7 @@ GOV_FEEDS = [
 ]
 
 _seen: set[str] = set()
+_SEEN_MAX = 5000
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; TXSafetyBot/1.0)"}
 
 
@@ -84,6 +85,8 @@ class GovDataAgent(BaseAgent):
             eid = self._entry_id(entry)
             if eid in _seen:
                 continue
+            if len(_seen) >= _SEEN_MAX:
+                _seen.clear()
             _seen.add(eid)
             title   = getattr(entry, "title", "") or ""
             summary = getattr(entry, "summary", "") or ""

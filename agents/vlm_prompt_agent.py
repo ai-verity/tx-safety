@@ -15,12 +15,8 @@ along with a camera frame to get actionable situational intelligence.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel, Field
 import uuid
@@ -112,7 +108,6 @@ CAMERA_ZONE_DESCRIPTIONS = {
     "convenience_store":     "exterior camera at a 24-hour convenience store entrance",
     "residential_street":    "neighbourhood watch camera on a residential block",
     "highway":               "TXDOT overhead gantry camera on a freeway",
-    "intersection":          "fixed overhead PTZ at a signalised four-way intersection",
     "bridge":                "overhead fixed camera at a bridge approach",
     "freeway_onramp":        "ramp-metering camera at a freeway on-ramp",
     "school_zone":           "city-owned PTZ in an active school zone",
@@ -141,11 +136,9 @@ CAMERA_ZONE_DESCRIPTIONS = {
     "open_field":            "wide-angle camera covering open public space",
     "coastal_area":          "camera on elevated structure overlooking coastal or bay area",
     "low_water_crossing":    "fixed camera at a low-water crossing subject to flash flooding",
-    "school_zone":           "city-owned PTZ in an active school zone",
     "mall":                  "interior/exterior PTZ at a regional shopping mall",
     "waterfront":            "camera on waterfront promenade or river walk",
     "freeway_interchange":   "TxDOT overhead camera at a major freeway interchange",
-    "bridge":                "overhead fixed camera at a bridge approach",
     "tunnel":                "interior tunnel safety camera",
     "public_space":          "overhead PTZ covering a general public space",
     "downtown_core":         "elevated PTZ covering downtown streets and sidewalks",
@@ -300,8 +293,6 @@ def generate_prompts_for_incident(incident: dict) -> list[VLMPrompt]:
 
 async def generate_all_prompts(hours: int = 24) -> list[VLMPrompt]:
     """Load recent incidents from DB and generate VLM prompts for all of them."""
-    import sys, os
-    sys.path.insert(0, str(Path(__file__).parent.parent))
     from core.database import get_recent_incidents
 
     incidents = await get_recent_incidents(hours=hours, limit=200)

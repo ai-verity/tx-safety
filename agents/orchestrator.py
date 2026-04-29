@@ -12,6 +12,8 @@ from core.llm import check_ollama
 
 logger = logging.getLogger(__name__)
 
+_agent_tasks: list[asyncio.Task] = []  # held at module level to prevent GC
+
 
 class OrchestratorState(TypedDict):
     llm_ok: bool
@@ -60,7 +62,8 @@ async def start_agents_node(state: OrchestratorState) -> OrchestratorState:
 
     started = []
     for agent in agents:
-        asyncio.create_task(agent.start(), name=f"agent-{agent.name}")
+        task = asyncio.create_task(agent.start(), name=f"agent-{agent.name}")
+        _agent_tasks.append(task)
         started.append(agent.name)
         logger.info(f"[orchestrator] started agent: {agent.name}")
 

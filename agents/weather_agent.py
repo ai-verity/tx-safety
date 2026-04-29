@@ -34,6 +34,7 @@ NOAA_FEEDS = [
 ]
 
 _seen: set[str] = set()
+_SEEN_MAX = 5000
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; TXSafetyBot/1.0)"}
 
 # XML namespaces used by NOAA CAP feeds
@@ -110,6 +111,8 @@ class WeatherAgent(BaseAgent):
                     alert_id = hashlib.md5((entry.get("title","") + name).encode()).hexdigest()
                 if alert_id in _seen:
                     continue
+                if len(_seen) >= _SEEN_MAX:
+                    _seen.clear()
                 _seen.add(alert_id)
                 title   = entry.get("title", "")
                 summary = entry.get("summary", "")

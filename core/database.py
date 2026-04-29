@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 import aiosqlite
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from core.models import Incident, AgentStatus
@@ -90,7 +90,7 @@ async def get_active_incidents(limit: int = 200) -> list[dict]:
 async def get_recent_incidents(hours: int = 24, limit: int = 500) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cutoff = datetime.utcnow().replace(microsecond=0).isoformat()
+        cutoff = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         async with db.execute(
             """SELECT * FROM incidents
                WHERE reported_at > datetime(?, '-' || ? || ' hours')
@@ -105,7 +105,7 @@ async def resolve_incident(incident_id: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE incidents SET active=0, resolved_at=? WHERE id=?",
-            (datetime.utcnow().isoformat(), incident_id)
+            (datetime.now(timezone.utc).isoformat(), incident_id)
         )
         await db.commit()
 
