@@ -61,6 +61,7 @@ SAFETY_KEYWORDS = [
 ]
 
 _seen: set[str] = set()
+_SEEN_MAX = 5000
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; TXSafetyBot/1.0)"}
 
@@ -118,6 +119,8 @@ class NewsAgent(BaseAgent):
             combined = f"{title}. {summary}"
             if not self._is_safety_related(combined):
                 continue
+            if len(_seen) >= _SEEN_MAX:
+                _seen.clear()
             _seen.add(eid)
             items.append(RawItem(
                 source=name,

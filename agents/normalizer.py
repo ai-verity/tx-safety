@@ -6,7 +6,7 @@ Broadcasts new incidents over WebSocket.
 from __future__ import annotations
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from core.models import RawItem, Incident, IncidentType, Severity
 from core.database import upsert_incident, get_active_incidents
 from core.llm import chat_json
@@ -46,7 +46,7 @@ class NormalizationAgent:
         try:
             result = await chat_json(SYSTEM_PROMPT, item.raw_text[:1500])
         except Exception as e:
-            logger.warning(f"[normalizer] LLM error: {e}")
+            logger.warning(f"[normalizer] LLM call failed ({type(e).__name__}): {e}")
             return None
 
         if not result:
@@ -71,7 +71,7 @@ class NormalizationAgent:
         # Geocode
         lat, lon = await geocode_city(city, county)
         map_x, map_y = None, None
-        if lat and lon:
+        if lat is not None and lon is not None:
             map_x, map_y = map_coords(lat, lon)
 
         incident = Incident(
@@ -87,7 +87,7 @@ class NormalizationAgent:
             source_url=item.url,
             active=True,
             reported_at=item.retrieved_at,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(timezone.utc),
         )
 
         # Quick dedup: skip if very similar title seen in last 6 hours
@@ -109,8 +109,11 @@ class NormalizationAgent:
             title_words = set(inc.title.lower().split())
             for existing in active:
                 existing_words = set((existing.get("title") or "").lower().split())
-                if len(title_words) > 3:
-                    overlap = len(title_words & existing_words) / len(title_words)
+                if len(title_words) >= 2:
+                    if len(title_words) <= 3:
+                        overlap = 1.0 if title_words == existing_words else 0.0
+                    else:
+                        overlap = len(title_words & existing_words) / len(title_words)
                     if overlap > 0.7 and existing.get("city", "") == inc.city:
                         return True
         except Exception:

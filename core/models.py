@@ -1,6 +1,6 @@
 """Shared data models for the TX Public Safety system."""
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -37,7 +37,7 @@ class RawItem(BaseModel):
     source: str
     raw_text: str
     url: Optional[str] = None
-    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Incident(BaseModel):
@@ -55,8 +55,8 @@ class Incident(BaseModel):
     source: str = ""
     source_url: Optional[str] = None
     active: bool = True
-    reported_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    reported_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     resolved_at: Optional[datetime] = None
     embedding_id: Optional[str] = None
 

@@ -114,7 +114,10 @@ async def api_briefing():
         '\n\nRespond with JSON: {"title":"...","summary":"2-3 paragraph briefing",'
         '"priority_areas":["city1"],"threat_level":"LOW/MODERATE/HIGH/CRITICAL"}',
     )
-    return result or {"title": "Unavailable", "summary": "LLM error.", "threat_level": "UNKNOWN"}
+    if not result:
+        logger.warning("[briefing] LLM returned empty or unparseable response")
+        return {"title": "Unavailable", "summary": "LLM error.", "threat_level": "UNKNOWN"}
+    return result
 
 @app.get("/api/health")
 async def health():

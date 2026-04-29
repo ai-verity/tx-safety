@@ -19,7 +19,6 @@ TX_CITY_COORDS: dict[str, tuple[float, float]] = {
     "lubbock":        (33.5779, -101.8552),
     "garland":        (32.9126, -96.6389),
     "irving":         (32.8140, -96.9489),
-    "amarillo":       (35.2220, -101.8313),
     "grand prairie":  (32.7460, -96.9978),
     "brownsville":    (25.9017, -97.4975),
     "mckinney":       (33.1972, -96.6397),
@@ -54,7 +53,6 @@ TX_CITY_COORDS: dict[str, tuple[float, float]] = {
     "league city":    (29.5075, -95.0949),
     "allen":          (33.1032, -96.6705),
     "richardson":     (32.9483, -96.7299),
-    "el paso":        (31.7619, -106.4850),
     "san marcos":     (29.8833, -97.9414),
     "pharr":          (26.1948, -98.1836),
     "baytown":        (29.7355, -94.9774),
@@ -72,11 +70,16 @@ TX_CITY_COORDS: dict[str, tuple[float, float]] = {
     "nacogdoches":    (31.6035, -94.6557),
     "texarkana":      (33.4251, -94.0477),
     "galveston":      (29.3013, -94.7977),
-    "amarillo":       (35.2220, -101.8313),
-    "lubbock":        (33.5779, -101.8552),
 }
 
 _geo_cache: dict[str, tuple[float, float]] = {}
+_GEO_CACHE_MAX = 2000
+
+
+def _cache_set(key: str, coords: tuple[float, float]) -> None:
+    if len(_geo_cache) >= _GEO_CACHE_MAX:
+        _geo_cache.pop(next(iter(_geo_cache)))
+    _geo_cache[key] = coords
 
 
 async def geocode_city(city: str, county: str = "") -> tuple[Optional[float], Optional[float]]:
@@ -86,12 +89,12 @@ async def geocode_city(city: str, county: str = "") -> tuple[Optional[float], Op
         return _geo_cache[key]
     if key in TX_CITY_COORDS:
         coords = TX_CITY_COORDS[key]
-        _geo_cache[key] = coords
+        _cache_set(key, coords)
         return coords
     # Partial match
     for known, coords in TX_CITY_COORDS.items():
         if known in key or key in known:
-            _geo_cache[key] = coords
+            _cache_set(key, coords)
             return coords
     # Try Nominatim as last resort
     try:
@@ -106,7 +109,7 @@ async def geocode_city(city: str, county: str = "") -> tuple[Optional[float], Op
             if results:
                 lat = float(results[0]["lat"])
                 lon = float(results[0]["lon"])
-                _geo_cache[key] = (lat, lon)
+                _cache_set(key, (lat, lon))
                 return lat, lon
     except Exception:
         pass
