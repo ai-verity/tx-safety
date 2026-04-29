@@ -418,6 +418,7 @@ def build_vlm_prompt(incident: dict, persona_key: str) -> dict:
     location_str = f"{city}{', ' + county + ' County' if county else ''}, Texas"
 
     reported_at = incident.get("reported_at", "")
+    reported_at_iso = str(reported_at) if reported_at else ""
     try:
         dt = datetime.fromisoformat(str(reported_at).replace("Z", "+00:00"))
         time_str = dt.strftime("%B %d, %Y at %H:%M CDT")
@@ -508,6 +509,7 @@ Provide your structured analysis now. Flag any P1-level observations (imminent t
         "user_prompt": user_prompt,
         "metadata": {
             "reported_at": time_str,
+            "reported_at_iso": reported_at_iso,
             "source": source,
             "scene_context": cues["scene"],
             "time_sensitivity": cues["time_sensitivity"],

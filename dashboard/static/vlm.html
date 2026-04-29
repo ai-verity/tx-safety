@@ -182,6 +182,7 @@ body{background:var(--bg0);color:var(--t0);font-family:var(--font);font-size:13p
 </div>
 <script>
 const API=`${location.protocol}//${location.host}`;
+const EMPTY_EL=document.getElementById('empty');
 let allPrompts=[],activePersona='all',activeSeverities=new Set(['P1','P2','P3','P4']),activeTypes=new Set(),sortBy='severity',searchQuery='';
 const PCOL={law_enforcement:'#4da6ff',city_official:'#b39dfa',physical_security:'#3dd68c'};
 const PBADGE={law_enforcement:'LE',city_official:'GOV',physical_security:'SOC'};
@@ -244,16 +245,15 @@ function applyFilters(){
     return true;
   });
   if(sortBy==='severity') f.sort((a,b)=>(SORD[a.severity]||3)-(SORD[b.severity]||3));
-  else if(sortBy==='time') f.sort((a,b)=>new Date(b.metadata?.reported_at||0)-new Date(a.metadata?.reported_at||0));
+  else if(sortBy==='time') f.sort((a,b)=>new Date(b.metadata?.reported_at_iso||0)-new Date(a.metadata?.reported_at_iso||0));
   else if(sortBy==='type') f.sort((a,b)=>(a.incident_type||'').localeCompare(b.incident_type||''));
   renderPrompts(f);
 }
 
 function renderPrompts(prompts){
   const list=document.getElementById('prompt-list');
-  const empty=document.getElementById('empty');
-  if(!prompts.length){list.innerHTML='';list.appendChild(empty);empty.style.display='flex';return;}
-  empty.style.display='none';
+  if(!prompts.length){list.innerHTML='';list.appendChild(EMPTY_EL);EMPTY_EL.style.display='flex';return;}
+  EMPTY_EL.style.display='none';
   window._fp=prompts;
   list.innerHTML=prompts.map((p,idx)=>{
     const pcol=PCOL[p.persona]||'#4da6ff';
@@ -266,7 +266,7 @@ function renderPrompts(prompts){
         <span class="pc-type">${esc(p.incident_type||'Incident')}</span>
         <span class="pc-loc">${esc(p.location||'TX')}</span>
         <span class="pc-persona-badge" style="background:${pcol}22;color:${pcol};border:1px solid ${pcol}44">${pbadge}</span>
-        <span class="pc-time">${age(p.metadata?.reported_at)}</span>
+        <span class="pc-time">${age(p.metadata?.reported_at_iso||p.metadata?.reported_at)}</span>
         <span class="pc-chevron">&#9658;</span>
       </div>
       <div class="pc-title">${esc(intro)}</div>
@@ -297,6 +297,7 @@ function renderPrompts(prompts){
       </div>
     </div>`;
   }).join('');
+  list.appendChild(EMPTY_EL);
 }
 
 function toggle(i){document.getElementById(`c${i}`).classList.toggle('expanded');}
