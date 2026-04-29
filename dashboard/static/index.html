@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Texas Public Safety — Situational Awareness</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg0: #0a0c0f;
+  --bg1: #0f1318;
+  --bg2: #141922;
+  --bg3: #1a2030;
+  --bg4: #202840;
+  --border: rgba(100,140,200,0.12);
+  --border-hi: rgba(100,180,255,0.25);
+  --text0: #e8edf5;
+  --text1: #a8b8cc;
+  --text2: #6a7d96;
+  --text3: #3a4a5e;
+  --red:    #ff4d4d;
+  --red-bg: rgba(255,60,60,0.1);
+  --orange: #ff8c42;
+  --orange-bg: rgba(255,140,60,0.1);
+  --blue:   #4da6ff;
+  --blue-bg: rgba(77,166,255,0.1);
+  --green:  #40c97e;
+  --green-bg: rgba(64,201,126,0.1);
+  --teal:   #2dd4bf;
+  --yellow: #fbbf24;
+  --purple: #a78bfa;
+  --accent: #4da6ff;
+  --scan: rgba(77,166,255,0.04);
+  --glow-red: 0 0 20px rgba(255,60,60,0.3);
+  --glow-blue: 0 0 20px rgba(77,166,255,0.2);
+  --font: 'Space Grotesk', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg0); color: var(--text0); font-family: var(--font);
+       font-size: 13px; min-height: 100vh; overflow-x: hidden; }
+
+/* Scanline overlay */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px);
+}
+
+/* ─── HEADER ─── */
+#header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: var(--bg1);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.hdr-left { display: flex; align-items: center; gap: 12px; }
+.hdr-logo { font-size: 11px; font-weight: 600; letter-spacing: .15em;
+            color: var(--blue); text-transform: uppercase; font-family: var(--mono); }
+.hdr-title { font-size: 14px; font-weight: 600; color: var(--text0); }
+.hdr-sub { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+.hdr-right { display: flex; align-items: center; gap: 16px; }
+.live-badge {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--green-bg); border: 1px solid rgba(64,201,126,0.3);
+  border-radius: 3px; padding: 3px 8px; font-size: 10px; font-weight: 600;
+  letter-spacing: .1em; color: var(--green); text-transform: uppercase; font-family: var(--mono);
+}
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+            animation: pulse-green 1.4s ease-in-out infinite; }
+@keyframes pulse-green {
+  0%,100% { opacity: 1; box-shadow: 0 0 6px var(--green); }
+  50% { opacity: .4; box-shadow: none; }
+}
+#clock { font-family: var(--mono); font-size: 13px; color: var(--text1); }
+#model-badge { font-family: var(--mono); font-size: 10px; color: var(--text3);
+               border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px; }
+#ws-status { font-family: var(--mono); font-size: 10px; padding: 2px 7px;
+             border-radius: 3px; border: 1px solid; }
+.ws-connected { color: var(--green); border-color: rgba(64,201,126,0.3) !important; }
+.ws-disconnected { color: var(--red); border-color: rgba(255,60,60,0.3) !important; }
+
+/* ─── STATS BAR ─── */
+#statsbar {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.stat-cell {
+  padding: 10px 14px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.stat-cell:last-child { border-right: none; }
+.stat-val { font-size: 26px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+.stat-lbl { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: .08em; }
+.stat-delta { font-size: 10px; color: var(--text2); font-family: var(--mono); }
+.v-red    { color: var(--red); }
+.v-orange { color: var(--orange); }
+.v-blue   { color: var(--blue); }
+.v-green  { color: var(--green); }
+.v-teal   { color: var(--teal); }
+
+/* ─── FILTER BAR ─── */
+#filterbar {
+  display: flex; align-items: center; gap: 8px; padding: 7px 14px;
+  background: var(--bg1); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.filter-lbl { font-size: 10px; color: var(--text2); text-transform: uppercase;
+              letter-spacing: .1em; margin-right: 4px; font-family: var(--mono); }
+.filter-btn {
+  font-size: 11px; font-family: var(--mono); padding: 3px 10px;
+  border: 1px solid var(--border); border-radius: 3px; background: transparent;
+  color: var(--text2); cursor: pointer; transition: all .15s; text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.filter-btn:hover { border-color: var(--border-hi); color: var(--text1); }
+.filter-btn.active { background: var(--blue-bg); border-color: var(--blue);
+                     color: var(--blue); }
+.spacer { flex: 1; }
+.briefing-btn {
+  font-size: 11px; font-family: var(--mono); padding: 4px 12px;
+  border: 1px solid rgba(167,139,250,0.4); border-radius: 3px;
+  background: rgba(167,139,250,0.08); color: var(--purple); cursor: pointer;
+  transition: all .15s; letter-spacing: .05em; text-transform: uppercase;
+}
+.briefing-btn:hover { background: rgba(167,139,250,0.15); }
+
+/* ─── MAIN LAYOUT ─── */
+#main {
+  display: grid; grid-template-columns: 1fr 300px;
+  flex: 1; overflow: hidden; min-height: 0;
+}
+
+/* ─── MAP ─── */
+#map-panel {
+  position: relative; border-right: 1px solid var(--border);
+  background: var(--bg1); overflow: hidden; min-height: 480px;
+}
+#map-svg { width: 100%; height: 100%; display: block; }
+.tx-region { fill: var(--bg3); }
+.tx-border { fill: none; stroke: var(--border-hi); stroke-width: 1.5; }
+.map-grid  { stroke: rgba(100,140,200,0.06); stroke-width: 0.5; }
+
+/* Incident dot styles */
+.inc-dot circle { transition: r .2s; cursor: pointer; }
+.inc-dot:hover circle.main-dot { r: 10; }
+.p1-ring { animation: ring-pulse 2s ease-out infinite; }
+@keyframes ring-pulse {
+  0%   { r: 10; opacity: .6; }
+  100% { r: 22; opacity: 0; }
+}
+
+/* Map overlay controls */
+.map-legend {
+  position: absolute; bottom: 12px; left: 12px;
+  background: rgba(10,12,15,0.88); border: 1px solid var(--border);
+  border-radius: 4px; padding: 8px 12px; backdrop-filter: blur(4px);
+}
+.leg-item { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10px; color: var(--text1); font-family: var(--mono); }
+.leg-item:last-child { margin-bottom: 0; }
+.leg-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.map-counter {
+  position: absolute; top: 10px; left: 10px;
+  background: rgba(10,12,15,0.88); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px 10px; font-family: var(--mono); font-size: 11px; color: var(--text2);
+}
+
+/* Tooltip */
+#tooltip {
+  position: absolute; display: none; pointer-events: none; z-index: 100;
+  background: var(--bg2); border: 1px solid var(--border-hi);
+  border-radius: 4px; padding: 8px 12px; min-width: 200px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.tt-sev  { font-family: var(--mono); font-size: 10px; font-weight: 600;
+           letter-spacing: .1em; margin-bottom: 4px; }
+.tt-type { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.tt-loc  { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+.tt-time { font-family: var(--mono); font-size: 10px; color: var(--text2); }
+.tt-desc { font-size: 11px; color: var(--text1); margin-top: 6px;
+           padding-top: 6px; border-top: 1px solid var(--border); line-height: 1.5; }
+
+/* ─── SIDEBAR ─── */
+#sidebar {
+  display: flex; flex-direction: column; overflow: hidden; background: var(--bg1);
+}
+.panel {
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+}
+.panel-title { font-size: 10px; font-weight: 600; letter-spacing: .12em;
+               color: var(--text2); text-transform: uppercase; font-family: var(--mono); }
+.panel-count { font-family: var(--mono); font-size: 10px; color: var(--blue);
+               background: var(--blue-bg); border-radius: 3px; padding: 1px 6px; }
+
+/* Agent list */
+#agent-list { padding: 4px 0; }
+.agent-row { display: flex; align-items: center; gap: 8px;
+             padding: 5px 12px; border-bottom: 1px solid var(--border); }
+.agent-row:last-child { border-bottom: none; }
+.agent-indicator { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.ind-running  { background: var(--green); animation: pulse-green 1.4s infinite; }
+.ind-polling  { background: var(--blue); animation: pulse-blue 2s infinite; }
+.ind-idle     { background: var(--text3); }
+.ind-error    { background: var(--red); }
+@keyframes pulse-blue {
+  0%,100% { opacity:1; box-shadow: 0 0 5px var(--blue); }
+  50% { opacity:.4; box-shadow: none; }
+}
+.agent-name   { flex: 1; font-size: 11px; color: var(--text1); }
+.agent-status { font-family: var(--mono); font-size: 10px; color: var(--text2); }
+.agent-count  { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+/* Type breakdown bars */
+#bars-wrap { padding: 8px 12px; }
+.bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.bar-lbl  { width: 80px; font-size: 10px; color: var(--text2); font-family: var(--mono);
+            text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 2px; transition: width .5s ease; }
+.bar-n     { width: 22px; text-align: right; font-family: var(--mono); font-size: 10px; color: var(--text2); }
+
+/* Live feed */
+#feed-list {
+  overflow-y: auto; flex: 1; min-height: 0;
+  scrollbar-width: thin; scrollbar-color: var(--bg4) transparent;
+}
+.feed-item {
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .1s; display: flex; flex-direction: column; gap: 2px;
+}
+.feed-item:hover { background: var(--bg2); }
+.feed-item.new-flash { animation: flash-in .6s ease-out; }
+@keyframes flash-in {
+  0% { background: rgba(77,166,255,0.15); }
+  100% { background: transparent; }
+}
+.fi-row1 { display: flex; align-items: center; gap: 5px; }
+.fi-badge {
+  font-family: var(--mono); font-size: 9px; font-weight: 600; padding: 1px 5px;
+  border-radius: 2px; letter-spacing: .06em; flex-shrink: 0;
+}
+.badge-P1 { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,60,60,.3); }
+.badge-P2 { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(255,140,60,.3); }
+.badge-P3 { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(77,166,255,.3); }
+.badge-P4 { background: var(--green-bg); color: var(--green); border: 1px solid rgba(64,201,126,.3); }
+.fi-city  { font-size: 10px; color: var(--text2); font-family: var(--mono); }
+.fi-type  { font-size: 12px; font-weight: 500; color: var(--text0); line-height: 1.3; }
+.fi-desc  { font-size: 10px; color: var(--text2); line-height: 1.4; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; }
+.fi-time  { font-family: var(--mono); font-size: 9px; color: var(--text3); }
+
+/* LLM loading banner */
+#llm-loading-banner {
+  display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 1001;
+  background: rgba(10,12,15,0.97); color: var(--yellow); padding: 9px 16px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  border-bottom: 2px solid rgba(251,191,36,0.4); text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.llm-spinner {
+  width: 12px; height: 12px; border: 2px solid rgba(251,191,36,0.3);
+  border-top-color: var(--yellow); border-radius: 50%;
+  animation: spin .8s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Surge alert banner */
+#surge-banner {
+  display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(255,60,60,0.95); color: #fff; padding: 8px 16px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .05em;
+  border-bottom: 2px solid var(--red); text-align: center;
+}
+
+/* Briefing modal */
+#briefing-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(5,8,12,0.92); align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+}
+#briefing-modal.open { display: flex; }
+.briefing-card {
+  background: var(--bg2); border: 1px solid var(--border-hi);
+  border-radius: 6px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh;
+  overflow-y: auto; position: relative;
+}
+.briefing-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 12px;
+                     color: var(--blue); font-family: var(--mono); }
+.briefing-body { font-size: 13px; line-height: 1.7; color: var(--text1); white-space: pre-wrap; }
+.briefing-close {
+  position: absolute; top: 12px; right: 12px; background: transparent;
+  border: 1px solid var(--border); border-radius: 3px; color: var(--text2);
+  cursor: pointer; font-size: 12px; padding: 2px 8px; font-family: var(--mono);
+}
+.briefing-close:hover { color: var(--text0); border-color: var(--border-hi); }
+.threat-badge {
+  display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 3px 10px; border-radius: 3px; margin-bottom: 12px; letter-spacing: .1em;
+}
+.threat-LOW      { background: var(--green-bg); color: var(--green); border: 1px solid rgba(64,201,126,.4); }
+.threat-MODERATE { background: var(--orange-bg); color: var(--orange); border: 1px solid rgba(255,140,60,.4); }
+.threat-HIGH     { background: var(--red-bg); color: var(--red); border: 1px solid rgba(255,60,60,.4); }
+.threat-CRITICAL { background: rgba(255,0,0,0.2); color: #ff6060; border: 1px solid red; }
+
+/* Surge notification toast */
+#toast-container { position: fixed; bottom: 16px; right: 16px; z-index: 900; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--bg2); border: 1px solid var(--border-hi);
+  border-radius: 4px; padding: 10px 14px; font-size: 12px; max-width: 280px;
+  animation: slide-in .3s ease-out; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+@keyframes slide-in { from { transform: translateX(100%); opacity: 0; } }
+.toast-title { font-weight: 600; color: var(--orange); font-family: var(--mono); font-size: 11px; margin-bottom: 3px; }
+.toast-body  { color: var(--text1); font-size: 11px; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="hdr-left">
+    <div class="hdr-logo">TX-SAFE</div>
+    <div>
+      <div class="hdr-title">Texas Public Safety — Situational Awareness</div>
+      <div class="hdr-sub">Agentic AI Monitoring System · All 254 Counties</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <span id="ws-status" class="ws-disconnected">⬤ OFFLINE</span>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <span id="clock">--:--:-- CDT</span>
+    <span id="model-badge">qwen2.5:14b · Ollama</span>
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div id="statsbar">
+  <div class="stat-cell">
+    <div class="stat-val v-red" id="s-active">—</div>
+    <div class="stat-lbl">Active Incidents</div>
+    <div class="stat-delta" id="s-active-d">loading...</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val v-orange" id="s-p1">—</div>
+    <div class="stat-lbl">Priority 1 Critical</div>
+    <div class="stat-delta">Immediate response</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val v-blue" id="s-24h">—</div>
+    <div class="stat-lbl">Last 24 Hours</div>
+    <div class="stat-delta" id="s-24h-d">all incidents</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val v-green" id="s-res">—</div>
+    <div class="stat-lbl">Resolved Today</div>
+    <div class="stat-delta">cleared incidents</div>
+  </div>
+  <div class="stat-cell">
+    <div class="stat-val v-teal" id="s-avg">—</div>
+    <div class="stat-lbl">Avg Response</div>
+    <div class="stat-delta">minutes</div>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div id="filterbar">
+  <span class="filter-lbl">Filter:</span>
+  <button class="filter-btn active" onclick="setFilter(this,'all')">All</button>
+  <button class="filter-btn" onclick="setFilter(this,'Shooting')">Shooting</button>
+  <button class="filter-btn" onclick="setFilter(this,'Vehicle')">Vehicle</button>
+  <button class="filter-btn" onclick="setFilter(this,'Fire')">Fire</button>
+  <button class="filter-btn" onclick="setFilter(this,'Medical')">Medical</button>
+  <button class="filter-btn" onclick="setFilter(this,'Pursuit')">Pursuit</button>
+  <button class="filter-btn" onclick="setFilter(this,'Hazmat')">Hazmat</button>
+  <button class="filter-btn" onclick="setFilter(this,'Weather')">Weather</button>
+  <div class="spacer"></div>
+  <button class="briefing-btn" onclick="requestBriefing()">⬡ Request Briefing</button>
+</div>
+
+<!-- MAIN -->
+<div id="main" style="height: calc(100vh - 120px);">
+
+  <!-- MAP -->
+  <div id="map-panel">
+    <svg id="map-svg" viewBox="0 0 800 580" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="bg-grad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#141922"/>
+          <stop offset="100%" stop-color="#0a0c0f"/>
+        </radialGradient>
+        <!-- Grid lines -->
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(100,140,200,0.05)" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+      <rect width="800" height="580" fill="url(#bg-grad)"/>
+      <rect width="800" height="580" fill="url(#grid)"/>
+
+      <!-- Texas outline (detailed path matching real geography) -->
+      <path class="tx-region" d="
+        M 80,40 L 620,40 L 620,42 L 680,80 L 695,140 L 695,200
+        L 720,230 L 720,260 L 690,280 L 680,310 L 660,340
+        L 640,390 L 620,430 L 600,470 L 575,510 L 548,540
+        L 520,560 L 490,568 L 460,565 L 430,558 L 400,545
+        L 370,525 L 340,500 L 310,470 L 280,438 L 255,410
+        L 230,380 L 200,350 L 170,318 L 145,290 L 118,265
+        L 95,238 L 72,210 L 55,180 L 44,148 L 38,115
+        L 42,82 L 55,60 Z
+      " stroke="rgba(77,166,255,0.3)" stroke-width="1.5" fill-opacity="0.5"/>
+
+      <!-- Region ghost labels -->
+      <text x="365" y="80" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">PANHANDLE</text>
+      <text x="500" y="180" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">DFW METRO</text>
+      <text x="180" y="240" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">WEST TX</text>
+      <text x="440" y="310" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">CENTRAL TX</text>
+      <text x="580" y="380" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">HOUSTON</text>
+      <text x="295" y="450" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">SAN ANTONIO</text>
+      <text x="255" y="520" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">RIO GRANDE</text>
+      <text x="470" y="490" font-size="11" fill="rgba(168,184,204,0.2)" font-family="'JetBrains Mono',monospace" text-anchor="middle">COASTAL BEND</text>
+
+      <!-- Incident layer (populated by JS) -->
+      <g id="incident-layer"></g>
+    </svg>
+
+    <div class="map-counter" id="map-counter">Loading incidents...</div>
+
+    <div class="map-legend">
+      <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>P1 Critical</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--orange)"></div>P2 High</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--blue)"></div>P3 Medium</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>P4 Low</div>
+    </div>
+
+    <div id="tooltip">
+      <div class="tt-sev" id="tt-sev"></div>
+      <div class="tt-type" id="tt-type"></div>
+      <div class="tt-loc" id="tt-loc"></div>
+      <div class="tt-time" id="tt-time"></div>
+      <div class="tt-desc" id="tt-desc"></div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+
+    <!-- Agent Status -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <span class="panel-title">Agent Status</span>
+        <span class="panel-count" id="agent-count">0 active</span>
+      </div>
+      <div id="agent-list"></div>
+    </div>
+
+    <!-- Type Breakdown -->
+    <div class="panel">
+      <div class="panel-hdr">
+        <span class="panel-title">Incident Breakdown</span>
+      </div>
+      <div id="bars-wrap"></div>
+    </div>
+
+    <!-- Live Feed -->
+    <div class="panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="panel-hdr">
+        <span class="panel-title">Live Feed</span>
+        <span class="panel-count" id="feed-count">0</span>
+      </div>
+      <div id="feed-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- LLM loading banner -->
+<div id="llm-loading-banner">
+  <div class="llm-spinner"></div>
+  <span id="llm-loading-text">AI MODEL LOADING — agents will start automatically when ready</span>
+</div>
+
+<!-- Surge banner -->
+<div id="surge-banner" onclick="this.style.display='none'"></div>
+
+<!-- Briefing modal -->
+<div id="briefing-modal">
+  <div class="briefing-card">
+    <button class="briefing-close" onclick="document.getElementById('briefing-modal').classList.remove('open')">✕ CLOSE</button>
+    <h2>⬡ SITUATIONAL AWARENESS BRIEFING</h2>
+    <div id="briefing-threat"></div>
+    <div class="briefing-body" id="briefing-body">Requesting briefing from AI agent...</div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ─── Config ───
+const WS_URL = `ws://${location.host}/ws`;
+const API    = `${location.protocol}//${location.host}`;
+
+// ─── State ───
+let incidents  = [];
+let agentData  = [];
+let activeFilter = 'all';
+let ws = null;
+let reconnectTimer = null;
+
+// ─── Texas map coordinate mapping ───
+// Bounding box: lat 25.8–36.5, lon -106.6 to -93.5
+// SVG viewBox: 800×580
+function latLonToSVG(lat, lon) {
+  if (!lat || !lon) return null;
+  const latMin=25.8, latMax=36.5, lonMin=-106.6, lonMax=-93.5;
+  const svgW=640, svgH=510, offX=60, offY=45;
+  const x = ((lon - lonMin) / (lonMax - lonMin)) * svgW + offX;
+  const y = ((latMax - lat) / (latMax - latMin)) * svgH + offY;
+  return { x: Math.round(x*10)/10, y: Math.round(y*10)/10 };
+}
+
+const SEV_COLOR = { P1:'#ff4d4d', P2:'#ff8c42', P3:'#4da6ff', P4:'#40c97e' };
+const SEV_RADIUS = { P1:9, P2:7, P3:5.5, P4:4 };
+
+// ─── WebSocket ───
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    setWsStatus(true);
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    loadInitialData();
+  };
+
+  ws.onclose = () => {
+    setWsStatus(false);
+    reconnectTimer = setTimeout(connectWS, 3000);
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleEvent(msg.event, msg.data);
+    } catch {}
+  };
+}
+
+function setWsStatus(ok) {
+  const el = document.getElementById('ws-status');
+  el.textContent = ok ? '⬤ LIVE' : '⬤ OFFLINE';
+  el.className = ok ? 'ws-connected' : 'ws-disconnected';
+}
+
+// ─── Event handlers ───
+function handleEvent(event, data) {
+  switch (event) {
+    case 'new_incident':
+      addOrUpdateIncident(data);
+      renderFeed();
+      renderMap();
+      renderBars();
+      showNewToast(data);
+      break;
+    case 'stats_update':
+      renderStats(data);
+      break;
+    case 'full_refresh':
+      if (data.incidents) {
+        incidents = data.incidents;
+        renderMap();
+        renderFeed();
+        renderBars();
+      }
+      if (data.stats) renderStats(data.stats);
+      break;
+    case 'severity_upgrade':
+      const inc = incidents.find(i => i.id === data.id);
+      if (inc) { inc.severity = data.new_severity; renderMap(); renderFeed(); }
+      break;
+    case 'surge_alert':
+      showSurgeAlert(data);
+      break;
+    case 'briefing':
+      showBriefing(data);
+      break;
+  }
+}
+
+function addOrUpdateIncident(inc) {
+  const idx = incidents.findIndex(i => i.id === inc.id);
+  if (idx >= 0) incidents[idx] = inc;
+  else incidents.unshift(inc);
+}
+
+// ─── Initial data load ───
+async function loadInitialData() {
+  try {
+    const [incRes, agentRes] = await Promise.all([
+      fetch(`${API}/api/incidents`),
+      fetch(`${API}/api/agents`),
+    ]);
+    incidents = await incRes.json();
+    agentData = await agentRes.json();
+    renderAll();
+
+    const statsRes = await fetch(`${API}/api/stats`);
+    const stats = await statsRes.json();
+    renderStats(stats);
+  } catch (e) {
+    console.error('Initial load error:', e);
+  }
+}
+
+function renderAll() {
+  renderMap();
+  renderFeed();
+  renderBars();
+  renderAgents();
+}
+
+// ─── Map rendering ───
+function renderMap() {
+  const layer = document.getElementById('incident-layer');
+  const visible = incidents.filter(inc => {
+    if (!inc.active) return false;
+    if (activeFilter === 'all') return true;
+    return (inc.incident_type || '').toLowerCase().includes(activeFilter.toLowerCase());
+  });
+
+  layer.innerHTML = visible.map(inc => {
+    const pos = latLonToSVG(inc.lat, inc.lon);
+    if (!pos) return '';
+    const col = SEV_COLOR[inc.severity] || '#4da6ff';
+    const r   = SEV_RADIUS[inc.severity] || 5;
+    const glow = inc.severity === 'P1' ? `<circle cx="${pos.x}" cy="${pos.y}" r="${r}" fill="${col}" opacity="0.2" class="p1-ring"/>` : '';
+    const halo = inc.severity !== 'P4' ? `<circle cx="${pos.x}" cy="${pos.y}" r="${r+5}" fill="${col}" opacity="0.08"/>` : '';
+    const esc = (s) => (s||'').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+    return `<g class="inc-dot" 
+      data-id="${inc.id}"
+      onmouseenter="showTooltip(event,'${inc.id}')"
+      onmouseleave="hideTooltip()"
+      onclick="openIncidentDetail('${inc.id}')">
+      ${glow}${halo}
+      <circle class="main-dot" cx="${pos.x}" cy="${pos.y}" r="${r}"
+        fill="${col}" opacity="0.9"
+        stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+    </g>`;
+  }).join('');
+
+  document.getElementById('map-counter').textContent =
+    `${visible.length} active incident${visible.length!==1?'s':''} · ${incidents.filter(i=>i.active).length} total`;
+}
+
+// ─── Tooltip ───
+function showTooltip(e, id) {
+  const inc = incidents.find(i => i.id === id);
+  if (!inc) return;
+  const tt = document.getElementById('tooltip');
+  const sev = inc.severity || 'P4';
+  document.getElementById('tt-sev').textContent  = `${sev} · ${inc.source || 'Unknown source'}`;
+  document.getElementById('tt-sev').style.color  = SEV_COLOR[sev] || '#4da6ff';
+  document.getElementById('tt-type').textContent = inc.incident_type || 'Incident';
+  document.getElementById('tt-loc').textContent  = [inc.city, inc.county ? inc.county+' County' : '', 'TX'].filter(Boolean).join(', ');
+  document.getElementById('tt-time').textContent = formatAge(inc.reported_at);
+  document.getElementById('tt-desc').textContent = inc.description || inc.title || '';
+  document.getElementById('tt-desc').style.display = inc.description ? 'block' : 'none';
+
+  const panel = document.getElementById('map-panel');
+  const pr = panel.getBoundingClientRect();
+  const er = e.target.getBoundingClientRect();
+  let left = er.left - pr.left + 12;
+  let top  = er.top  - pr.top  - 80;
+  if (left + 220 > pr.width) left = er.left - pr.left - 215;
+  if (top < 0) top = er.top - pr.top + 12;
+  tt.style.left = left + 'px';
+  tt.style.top  = top  + 'px';
+  tt.style.display = 'block';
+}
+function hideTooltip() { document.getElementById('tooltip').style.display = 'none'; }
+
+// ─── Feed ───
+function renderFeed() {
+  const sorted = [...incidents]
+    .filter(i => activeFilter==='all' || (i.incident_type||'').toLowerCase().includes(activeFilter.toLowerCase()))
+    .sort((a,b) => new Date(b.reported_at) - new Date(a.reported_at))
+    .slice(0, 30);
+
+  document.getElementById('feed-count').textContent = sorted.length;
+  document.getElementById('feed-list').innerHTML = sorted.map(inc => `
+    <div class="feed-item" id="fi-${inc.id}" onclick="openIncidentDetail('${inc.id}')">
+      <div class="fi-row1">
+        <span class="fi-badge badge-${inc.severity||'P4'}">${inc.severity||'P4'}</span>
+        <span class="fi-city">${inc.city||'TX'}</span>
+      </div>
+      <div class="fi-type">${inc.incident_type||'Incident'}</div>
+      <div class="fi-desc">${inc.title||''}</div>
+      <div class="fi-time">${formatAge(inc.reported_at)}</div>
+    </div>`).join('');
+}
+
+// ─── Bars ───
+function renderBars() {
+  const types = {};
+  const TYPE_COLORS = {
+    'Shooting':'#ff4d4d','Vehicle Accident':'#ff8c42','Fire':'#ff6b2b',
+    'Medical Emergency':'#4da6ff','Pursuit':'#a78bfa','Hazmat':'#fbbf24',
+    'Natural Disaster':'#2dd4bf','Missing Person':'#f472b6',
+    'Assault':'#f87171','Disturbance':'#6b7280',
+    'Suspicious Activity':'#9ca3af','Other':'#4b5563',
+  };
+  incidents.filter(i=>i.active).forEach(i => {
+    const t = i.incident_type || 'Other';
+    types[t] = (types[t]||0) + 1;
+  });
+  const sorted = Object.entries(types).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const max = sorted[0]?.[1] || 1;
+  document.getElementById('bars-wrap').innerHTML = sorted.map(([t,c]) => `
+    <div class="bar-row">
+      <div class="bar-lbl">${t.replace(' Accident','').replace(' Emergency','').replace(' Activity','')}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(c/max*100)}%;background:${TYPE_COLORS[t]||'#4da6ff'}"></div></div>
+      <div class="bar-n">${c}</div>
+    </div>`).join('');
+}
+
+// ─── Stats ───
+function renderStats(s) {
+  if (!s) return;
+  setEl('s-active', s.active ?? '—');
+  setEl('s-p1', s.p1 ?? '—');
+  setEl('s-24h', s.last24h ?? '—');
+  setEl('s-res', s.resolved ?? '—');
+  setEl('s-avg', s.avg_response_min != null ? s.avg_response_min+'m' : '—');
+}
+function setEl(id, v) { const el=document.getElementById(id); if(el) el.textContent=v; }
+
+// ─── Agents ───
+async function refreshAgents() {
+  try {
+    const r = await fetch(`${API}/api/agents`);
+    agentData = await r.json();
+    renderAgents();
+  } catch {}
+}
+function renderAgents() {
+  const AGENTS_DEFAULT = [
+    {name:'news_agent',     display:'News RSS Agent'},
+    {name:'gov_data_agent', display:'Gov Data Agent'},
+    {name:'social_agent',   display:'Social/Web Agent'},
+    {name:'weather_agent',  display:'Weather Agent'},
+    {name:'threat_classifier', display:'Threat Classifier'},
+    {name:'trend_agent',    display:'Trend Agent'},
+    {name:'report_agent',   display:'Report Agent'},
+  ];
+
+  const byName = {};
+  agentData.forEach(a => { byName[a.name] = a; });
+
+  const running = agentData.filter(a => a.status === 'running').length;
+  document.getElementById('agent-count').textContent = `${running} running`;
+
+  document.getElementById('agent-list').innerHTML = AGENTS_DEFAULT.map(def => {
+    const a = byName[def.name] || {status:'idle', items_processed:0};
+    const cls = a.status==='running'?'ind-running':a.status==='error'?'ind-error':a.status==='polling'?'ind-polling':'ind-idle';
+    return `<div class="agent-row">
+      <div class="agent-indicator ${cls}"></div>
+      <div class="agent-name">${def.display}</div>
+      <div class="agent-status">${a.status||'idle'}</div>
+      <div class="agent-count">${a.items_processed||0}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Filter ───
+function setFilter(btn, filter) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = filter;
+  renderMap();
+  renderFeed();
+}
+
+// ─── Surge / Toast / Briefing ───
+function showSurgeAlert(surges) {
+  if (!surges || !surges.length) return;
+  const banner = document.getElementById('surge-banner');
+  banner.textContent = '⚠ SURGE: ' + surges.map(s=>s.message).join(' | ');
+  banner.style.display = 'block';
+  setTimeout(()=>{ banner.style.display='none'; }, 8000);
+}
+
+function showNewToast(inc) {
+  if (inc.severity !== 'P1' && inc.severity !== 'P2') return;
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `<div class="toast-title">${inc.severity} · ${inc.incident_type}</div>
+    <div class="toast-body">${inc.city||'TX'} — ${inc.title||'New incident'}</div>`;
+  container.appendChild(toast);
+  setTimeout(()=>{ toast.remove(); }, 5000);
+}
+
+async function requestBriefing() {
+  const modal = document.getElementById('briefing-modal');
+  modal.classList.add('open');
+  document.getElementById('briefing-body').textContent = 'Requesting briefing from AI agent...';
+  document.getElementById('briefing-threat').innerHTML = '';
+  try {
+    const r = await fetch(`${API}/api/briefing`, {method:'POST'});
+    const data = await r.json();
+    showBriefing(data);
+  } catch(e) {
+    document.getElementById('briefing-body').textContent = 'Error requesting briefing: '+e.message;
+  }
+}
+
+function showBriefing(data) {
+  if (!data) return;
+  const modal = document.getElementById('briefing-modal');
+  modal.classList.add('open');
+  const tl = data.threat_level || 'MODERATE';
+  document.getElementById('briefing-threat').innerHTML =
+    `<div class="threat-badge threat-${tl}">THREAT LEVEL: ${tl}</div>`;
+  document.getElementById('briefing-body').textContent =
+    data.summary || data.title || 'No briefing available';
+}
+
+function openIncidentDetail(id) {
+  const inc = incidents.find(i=>i.id===id);
+  if (!inc) return;
+  const parts = [
+    `[${inc.severity}] ${inc.incident_type}`,
+    `Location: ${[inc.city, inc.county, 'TX'].filter(Boolean).join(', ')}`,
+    `Reported: ${formatAge(inc.reported_at)}`,
+    inc.description || inc.title,
+    inc.source_url ? `Source: ${inc.source_url}` : `Source: ${inc.source||'Unknown'}`,
+  ];
+  alert(parts.join('\n\n'));
+}
+
+// ─── Helpers ───
+function formatAge(dt) {
+  if (!dt) return '—';
+  const ms = Date.now() - new Date(dt).getTime();
+  const m  = Math.floor(ms / 60000);
+  if (m < 1)   return 'Just now';
+  if (m < 60)  return m + 'm ago';
+  const h = Math.floor(m/60);
+  return h + 'h ' + (m%60) + 'm ago';
+}
+
+// ─── Clock ───
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('en-US', {hour12:false, timeZone:'America/Chicago'}) + ' CDT';
+}
+
+// ─── Periodic refreshes ───
+setInterval(updateClock, 1000);
+setInterval(refreshAgents, 15000);
+setInterval(() => {
+  document.querySelectorAll('#feed-list .fi-time').forEach((el, i) => {
+    const inc = incidents[i];
+    if (inc) el.textContent = formatAge(inc.reported_at);
+  });
+}, 30000);
+
+// ─── LLM health polling ───
+let _llmReady = false;
+let _llmPollTimer = null;
+
+async function checkLLMStatus() {
+  try {
+    const r = await fetch(`${API}/api/health`);
+    const h = await r.json();
+
+    // Update model badge from live health data
+    if (h.llm_model) {
+      const label = h.llm_base_url && h.llm_base_url.includes('11434') ? 'Ollama' : 'vLLM';
+      document.getElementById('model-badge').textContent = `${h.llm_model} · ${label}`;
+    }
+
+    if (h.llm_ok) {
+      document.getElementById('llm-loading-banner').style.display = 'none';
+      if (_llmPollTimer) { clearInterval(_llmPollTimer); _llmPollTimer = null; }
+      _llmReady = true;
+    } else {
+      document.getElementById('llm-loading-banner').style.display = 'flex';
+    }
+  } catch {
+    document.getElementById('llm-loading-banner').style.display = 'flex';
+  }
+}
+
+function startLLMPolling() {
+  checkLLMStatus();
+  _llmPollTimer = setInterval(checkLLMStatus, 10000);
+}
+
+// ─── Boot ───
+updateClock();
+connectWS();
+startLLMPolling();
+</script>
+</body>
+</html>

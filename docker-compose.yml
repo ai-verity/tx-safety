@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  # ── TX Safety App ─────────────────────────────────────────
+  tx-safety:
+    build: .
+    ports:
+      - "8006:8006"
+    environment:
+      - LLM_BASE_URL=http://vllm:8001/v1
+      - LLM_MODEL=Qwen/Qwen2.5-14B-Instruct
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      vllm:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── vLLM on H200 (swap in for Ollama in production) ───────
+  # Comment out for local Mac development (use Ollama instead)
+  vllm:
+    image: vllm/vllm-openai:latest
+    command: >
+      --model Qwen/Qwen2.5-14B-Instruct
+      --port 8001
+      --tensor-parallel-size 3
+      --max-model-len 8192
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 3
+              capabilities: [gpu]
+    ports:
+      - "8001:8001"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    profiles:
+      - gpu   # Only start with: docker compose --profile gpu up
+
+networks:
+  default:
+    driver: bridge
