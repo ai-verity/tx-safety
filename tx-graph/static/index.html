@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TX Safety — Incident Network Graph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+:root {
+  --ink:    #0a0d14;
+  --ink2:   #111827;
+  --ink3:   #1a2235;
+  --ink4:   #243048;
+  --glass:  rgba(15,23,42,0.85);
+  --wire:   rgba(77,166,255,0.18);
+  --wire-hi:rgba(77,166,255,0.5);
+  --t0: #e2eaf6;
+  --t1: #8fa8c8;
+  --t2: #4a6280;
+  --t3: #243048;
+  --blue:   #4da6ff;
+  --red:    #ff3d3d;
+  --orange: #ff9933;
+  --green:  #3dd68c;
+  --purple: #b39dfa;
+  --teal:   #2dd4bf;
+  --font:   'Syne', sans-serif;
+  --mono:   'Fira Code', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--ink); color: var(--t0); font-family: var(--font); }
+
+/* ── CANVAS ─────────────────────────────────────────── */
+#graph-canvas {
+  position: fixed; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse at 30% 40%, #0d1f3c 0%, #070b12 60%, #020408 100%);
+}
+
+/* Dot grid overlay */
+#graph-canvas::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(circle, rgba(77,166,255,0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── HEADER ─────────────────────────────────────────── */
+#hdr {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px;
+  background: linear-gradient(180deg, rgba(7,9,20,0.95) 0%, rgba(7,9,20,0) 100%);
+  pointer-events: none;
+}
+.hdr-l { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
+.brand { font-size: 11px; font-weight: 800; letter-spacing: .2em;
+         color: var(--blue); font-family: var(--mono); text-transform: uppercase; }
+.title { font-size: 15px; font-weight: 700; color: var(--t0); letter-spacing: .02em; }
+.subtitle { font-size: 10px; color: var(--t2); font-family: var(--mono); }
+.hdr-r { display: flex; align-items: center; gap: 10px; pointer-events: auto; }
+.live-pill {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(61,214,140,0.1); border: 1px solid rgba(61,214,140,0.3);
+  border-radius: 3px; padding: 3px 9px;
+  font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--green);
+  letter-spacing: .1em;
+}
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+         animation: glow 1.4s ease-in-out infinite; }
+@keyframes glow { 0%,100%{opacity:1;box-shadow:0 0 6px var(--green)} 50%{opacity:.4;box-shadow:none} }
+
+/* ── CONTROLS PANEL ─────────────────────────────────── */
+#controls {
+  position: fixed; top: 58px; left: 16px; z-index: 50;
+  display: flex; flex-direction: column; gap: 8px; width: 220px;
+}
+.ctrl-card {
+  background: var(--glass); border: 1px solid var(--wire);
+  border-radius: 8px; padding: 12px 14px;
+  backdrop-filter: blur(12px);
+}
+.ctrl-title { font-family: var(--mono); font-size: 9px; font-weight: 500;
+              letter-spacing: .14em; color: var(--t2); text-transform: uppercase; margin-bottom: 10px; }
+.ctrl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ctrl-row:last-child { margin-bottom: 0; }
+.ctrl-lbl { font-family: var(--mono); font-size: 10px; color: var(--t1); flex: 1; }
+input[type=range] {
+  flex: 1; -webkit-appearance: none; height: 3px;
+  background: var(--ink4); border-radius: 2px; outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--blue); cursor: pointer;
+  box-shadow: 0 0 8px rgba(77,166,255,0.5);
+}
+.range-val { font-family: var(--mono); font-size: 10px; color: var(--blue);
+             min-width: 28px; text-align: right; }
+.ctrl-btn {
+  font-family: var(--mono); font-size: 10px; padding: 5px 10px;
+  border-radius: 4px; border: 1px solid var(--wire); background: transparent;
+  color: var(--t1); cursor: pointer; transition: all .15s; width: 100%;
+  letter-spacing: .06em; text-align: left;
+}
+.ctrl-btn:hover { border-color: var(--wire-hi); color: var(--t0); background: rgba(77,166,255,0.06); }
+.ctrl-btn.active { background: rgba(77,166,255,0.12); border-color: var(--blue); color: var(--blue); }
+
+/* ── LEGEND ─────────────────────────────────────────── */
+#legend {
+  position: fixed; top: 58px; right: 16px; z-index: 50;
+  width: 200px; display: flex; flex-direction: column; gap: 8px;
+}
+.leg-section {
+  background: var(--glass); border: 1px solid var(--wire);
+  border-radius: 8px; padding: 12px 14px;
+  backdrop-filter: blur(12px);
+}
+.leg-title { font-family: var(--mono); font-size: 9px; font-weight: 500;
+             letter-spacing: .14em; color: var(--t2); text-transform: uppercase; margin-bottom: 9px; }
+.leg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; color: var(--t1); }
+.leg-row:last-child { margin-bottom: 0; }
+.leg-dot { border-radius: 50%; flex-shrink: 0; border: 2px solid transparent; }
+.leg-sq  { border-radius: 2px; flex-shrink: 0; }
+
+/* ── STATS BAR ──────────────────────────────────────── */
+#statsbar {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 50; display: flex; gap: 8px;
+  background: var(--glass); border: 1px solid var(--wire);
+  border-radius: 8px; padding: 10px 18px;
+  backdrop-filter: blur(12px);
+}
+.stat { text-align: center; padding: 0 12px; border-right: 1px solid var(--wire); }
+.stat:last-child { border-right: none; }
+.stat-n { font-size: 20px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+.stat-l { font-size: 9px; color: var(--t2); margin-top: 2px; letter-spacing: .06em; font-family: var(--mono); }
+
+/* ── TOOLTIP ────────────────────────────────────────── */
+#tooltip {
+  position: fixed; z-index: 200; pointer-events: none; display: none;
+  background: rgba(10,13,20,0.96); border: 1px solid var(--wire-hi);
+  border-radius: 6px; padding: 12px 16px; min-width: 200px; max-width: 280px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+}
+.tt-badge { font-family: var(--mono); font-size: 9px; font-weight: 600;
+            letter-spacing: .1em; padding: 2px 7px; border-radius: 2px; display: inline-block; margin-bottom: 6px; }
+.tt-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.tt-sub   { font-size: 11px; color: var(--t1); margin-bottom: 2px; font-family: var(--mono); }
+.tt-divider { border: none; border-top: 1px solid var(--wire); margin: 8px 0; }
+.tt-sev-row { display: flex; justify-content: space-between; font-size: 11px;
+              color: var(--t1); margin-bottom: 3px; font-family: var(--mono); }
+.tt-sev-row span:last-child { color: var(--t0); font-weight: 500; }
+
+/* ── SEARCH ─────────────────────────────────────────── */
+#search-wrap {
+  position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+  z-index: 50;
+}
+#search-input {
+  font-family: var(--mono); font-size: 11px; padding: 6px 14px;
+  background: rgba(10,13,20,0.88); border: 1px solid var(--wire);
+  border-radius: 20px; color: var(--t0); outline: none; width: 220px;
+  backdrop-filter: blur(8px); transition: border-color .15s;
+}
+#search-input:focus { border-color: var(--blue); }
+#search-input::placeholder { color: var(--t3); }
+
+/* ── HOURS SELECTOR ─────────────────────────────────── */
+.hours-btn {
+  font-family: var(--mono); font-size: 10px; padding: 3px 9px;
+  border: 1px solid var(--wire); border-radius: 3px; background: transparent;
+  color: var(--t2); cursor: pointer; transition: all .15s;
+}
+.hours-btn.active { background: rgba(77,166,255,0.1); border-color: var(--blue); color: var(--blue); }
+.hours-btn:hover:not(.active) { border-color: var(--wire-hi); color: var(--t1); }
+
+/* ── SVG ELEMENTS ───────────────────────────────────── */
+.node-city circle { cursor: grab; transition: filter .15s; }
+.node-city circle:active { cursor: grabbing; }
+.node-city:hover circle { filter: brightness(1.4) drop-shadow(0 0 10px var(--blue)); }
+.node-city .label { font-family: var(--font); font-weight: 700; fill: var(--t0);
+                    font-size: 11px; pointer-events: none; text-anchor: middle; }
+
+.node-inc circle { cursor: grab; transition: filter .2s; }
+.node-inc circle:active { cursor: grabbing; }
+.node-inc:hover circle { filter: brightness(1.5); }
+.node-inc .label { font-family: var(--mono); fill: var(--t0);
+                   font-size: 9px; pointer-events: none; text-anchor: middle; }
+
+.edge-city-link { stroke-dasharray: 4 4; opacity: .5; }
+.edge-incident-link { transition: opacity .2s; }
+
+.highlighted { filter: brightness(1.6) drop-shadow(0 0 12px currentColor) !important; }
+.dimmed { opacity: 0.12 !important; }
+</style>
+</head>
+<body>
+
+<div id="graph-canvas"></div>
+
+<!-- Header -->
+<div id="hdr">
+  <div class="hdr-l">
+    <div class="brand">TX-SAFE</div>
+    <div>
+      <div class="title">Incident Network Graph</div>
+      <div class="subtitle">Force-directed · Draggable nodes & edges · City clusters</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <div style="display:flex;gap:5px">
+      <button class="hours-btn active" onclick="setHours(this,24)">24h</button>
+      <button class="hours-btn" onclick="setHours(this,48)">48h</button>
+      <button class="hours-btn" onclick="setHours(this,168)">7d</button>
+    </div>
+    <div class="live-pill"><div class="pulse"></div>LIVE</div>
+    <span id="clock" style="font-family:var(--mono);font-size:11px;color:var(--t2)"></span>
+  </div>
+</div>
+
+<!-- Search -->
+<div id="search-wrap">
+  <input id="search-input" type="text" placeholder="Search city or incident type..." oninput="onSearch(this.value)">
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <div class="ctrl-card">
+    <div class="ctrl-title">Simulation</div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Charge</span>
+      <input type="range" min="-800" max="-50" value="-300" id="sl-charge" oninput="updateForce()">
+      <span class="range-val" id="v-charge">-300</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Link dist</span>
+      <input type="range" min="40" max="300" value="120" id="sl-dist" oninput="updateForce()">
+      <span class="range-val" id="v-dist">120</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Gravity</span>
+      <input type="range" min="0" max="1" step="0.05" value="0.08" id="sl-gravity" oninput="updateForce()">
+      <span class="range-val" id="v-gravity">0.08</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Collision</span>
+      <input type="range" min="0" max="3" step="0.1" value="1.2" id="sl-coll" oninput="updateForce()">
+      <span class="range-val" id="v-coll">1.2</span>
+    </div>
+  </div>
+  <div class="ctrl-card">
+    <div class="ctrl-title">Display</div>
+    <button class="ctrl-btn active" id="btn-labels" onclick="toggleLabels(this)">⬡ Node Labels ON</button>
+    <button class="ctrl-btn active" id="btn-weights" onclick="toggleWeights(this)">⬡ Edge Weights ON</button>
+    <button class="ctrl-btn active" id="btn-city-links" onclick="toggleCityLinks(this)">⬡ City Links ON</button>
+    <button class="ctrl-btn" onclick="resetZoom()">↺ Reset View</button>
+    <button class="ctrl-btn" onclick="reheat()">⚡ Reheat Simulation</button>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="leg-section">
+    <div class="leg-title">Severity (Edge Weight)</div>
+    <div class="leg-row"><div class="leg-dot" style="width:20px;height:20px;background:#ff3d3d;border-color:#ff3d3d"></div><span>P1 Critical — W:100</span></div>
+    <div class="leg-row"><div class="leg-dot" style="width:15px;height:15px;background:#ff9933;border-color:#ff9933"></div><span>P2 High — W:60</span></div>
+    <div class="leg-row"><div class="leg-dot" style="width:11px;height:11px;background:#4da6ff;border-color:#4da6ff"></div><span>P3 Medium — W:30</span></div>
+    <div class="leg-row"><div class="leg-dot" style="width:8px;height:8px;background:#3dd68c;border-color:#3dd68c"></div><span>P4 Low — W:10</span></div>
+  </div>
+  <div class="leg-section">
+    <div class="leg-title">Node Type</div>
+    <div class="leg-row"><div class="leg-sq" style="width:16px;height:16px;background:#0f172a;border:2px solid #4da6ff;border-radius:50%"></div><span>City cluster</span></div>
+    <div class="leg-row"><div class="leg-sq" style="width:12px;height:12px;background:#ff3d3d;border-radius:50%"></div><span>Incident type</span></div>
+    <div class="leg-row" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--wire)">
+      <svg width="30" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="rgba(77,166,255,0.4)" stroke-width="1" stroke-dasharray="4 3"/></svg>
+      <span>City → incident</span>
+    </div>
+    <div class="leg-row">
+      <svg width="30" height="10"><line x1="0" y1="5" x2="30" y2="5" stroke="#ff9933" stroke-width="2.5" opacity="0.6"/></svg>
+      <span>Incident correlation</span>
+    </div>
+  </div>
+</div>
+
+<!-- Stats bar -->
+<div id="statsbar">
+  <div class="stat"><div class="stat-n" id="st-cities" style="color:var(--blue)">—</div><div class="stat-l">CITIES</div></div>
+  <div class="stat"><div class="stat-n" id="st-types" style="color:var(--purple)">—</div><div class="stat-l">INC TYPES</div></div>
+  <div class="stat"><div class="stat-n" id="st-edges" style="color:var(--teal)">—</div><div class="stat-l">EDGES</div></div>
+  <div class="stat"><div class="stat-n" id="st-weight" style="color:var(--red)">—</div><div class="stat-l">TOTAL WEIGHT</div></div>
+  <div class="stat"><div class="stat-n" id="st-src" style="color:var(--t2);font-size:11px">—</div><div class="stat-l">DATA SOURCE</div></div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip">
+  <div class="tt-badge" id="tt-badge"></div>
+  <div class="tt-title" id="tt-title"></div>
+  <div class="tt-sub" id="tt-sub1"></div>
+  <div class="tt-sub" id="tt-sub2"></div>
+  <hr class="tt-divider" id="tt-div" style="display:none">
+  <div id="tt-sevs"></div>
+</div>
+
+<script>
+const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
+const API    = `${location.protocol}//${location.host}`;
+
+let graphData = null;
+let simulation = null;
+let svg, gMain, gLinks, gNodes;
+let showLabels = true, showWeights = true, showCityLinks = true;
+let activeHours = 24;
+let searchTerm = '';
+let transform = d3.zoomIdentity;
+
+const W = () => window.innerWidth;
+const H = () => window.innerHeight;
+
+// ── Init SVG ─────────────────────────────────────────────────────────────────
+function initSVG() {
+  d3.select('#graph-canvas svg').remove();
+  svg = d3.select('#graph-canvas')
+    .append('svg')
+    .attr('width', W()).attr('height', H());
+
+  const defs = svg.append('defs');
+
+  // Glow filter
+  const glow = defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
+  glow.append('feGaussianBlur').attr('stdDeviation','4').attr('result','blur');
+  const merge = glow.append('feMerge');
+  merge.append('feMergeNode').attr('in','blur');
+  merge.append('feMergeNode').attr('in','SourceGraphic');
+
+  // Strong glow
+  const glow2 = defs.append('filter').attr('id','glow2').attr('x','-80%').attr('y','-80%').attr('width','360%').attr('height','360%');
+  glow2.append('feGaussianBlur').attr('stdDeviation','8').attr('result','blur');
+  const m2 = glow2.append('feMerge');
+  m2.append('feMergeNode').attr('in','blur');
+  m2.append('feMergeNode').attr('in','SourceGraphic');
+
+  // Arrow markers for edges
+  ['#ff3d3d','#ff9933','#4da6ff','#3dd68c','rgba(77,166,255,0.5)'].forEach((col,i) => {
+    defs.append('marker').attr('id',`arrow${i}`)
+      .attr('viewBox','0 -4 8 8').attr('refX',12).attr('refY',0)
+      .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+      .append('path').attr('d','M0,-4L8,0L0,4').attr('fill',col).attr('opacity',0.6);
+  });
+
+  const zoom = d3.zoom().scaleExtent([0.1, 5])
+    .on('zoom', e => { transform = e.transform; gMain.attr('transform', e.transform); });
+  svg.call(zoom);
+
+  gMain  = svg.append('g');
+  gLinks = gMain.append('g').attr('class','links');
+  gNodes = gMain.append('g').attr('class','nodes');
+}
+
+// ── Render graph ──────────────────────────────────────────────────────────────
+function render(data) {
+  graphData = data;
+  const nodes = data.nodes.map(d => ({...d}));
+  const edges = data.edges.map(d => ({...d}));
+
+  updateStats(data);
+
+  // Node id → node map
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+
+  // Resolve edge sources/targets
+  const links = edges.map(e => ({
+    ...e,
+    source: nodeMap[e.source] || e.source,
+    target: nodeMap[e.target] || e.target,
+  })).filter(e => e.source && e.target);
+
+  // Position city nodes in a circle initially
+  const cityNodes = nodes.filter(n => n.type === 'city');
+  const incNodes  = nodes.filter(n => n.type === 'incident');
+  const cx = W() / 2, cy = H() / 2;
+  const r  = Math.min(W(), H()) * 0.32;
+  cityNodes.forEach((n, i) => {
+    const angle = (i / cityNodes.length) * Math.PI * 2;
+    n.x = cx + r * Math.cos(angle);
+    n.y = cy + r * Math.sin(angle);
+  });
+  incNodes.forEach(n => {
+    const cn = nodeMap[n.city_node];
+    if (cn) { n.x = cn.x + (Math.random()-0.5)*80; n.y = cn.y + (Math.random()-0.5)*80; }
+    else     { n.x = cx + (Math.random()-0.5)*200; n.y = cy + (Math.random()-0.5)*200; }
+  });
+
+  // ── Build simulation ───────────────────────────────────────────────────────
+  const charge  = +document.getElementById('sl-charge').value;
+  const dist    = +document.getElementById('sl-dist').value;
+  const gravity = +document.getElementById('sl-gravity').value;
+  const collMul = +document.getElementById('sl-coll').value;
+
+  if (simulation) simulation.stop();
+  simulation = d3.forceSimulation(nodes)
+    .force('charge',  d3.forceManyBody().strength(n => n.type==='city' ? charge*2 : charge))
+    .force('link',    d3.forceLink(links).id(d=>d.id)
+                         .distance(l => l.type==='city_link' ? dist*0.7 : dist)
+                         .strength(l  => l.type==='city_link' ? 0.6 : 0.3))
+    .force('x',       d3.forceX(cx).strength(gravity))
+    .force('y',       d3.forceY(cy).strength(gravity))
+    .force('collision', d3.forceCollide().radius(n => n.radius * collMul + 4))
+    .alphaDecay(0.02)
+    .velocityDecay(0.4);
+
+  // ── Draw edges ─────────────────────────────────────────────────────────────
+  gLinks.selectAll('*').remove();
+  const edgeSel = gLinks.selectAll('g.edge').data(links, d=>d.id).enter().append('g').attr('class','edge');
+
+  edgeSel.append('line')
+    .attr('class', d => d.type==='city_link' ? 'edge-city-link' : 'edge-incident-link')
+    .attr('stroke', d => d.color || 'rgba(77,166,255,0.3)')
+    .attr('stroke-width', d => d.width || 1)
+    .attr('stroke-linecap','round');
+
+  edgeSel.filter(d => d.type==='incident_link' && showWeights && d.label)
+    .append('text')
+    .attr('class','edge-label')
+    .attr('fill','rgba(168,184,220,0.5)')
+    .attr('font-size','9px')
+    .attr('font-family','var(--mono)')
+    .attr('text-anchor','middle')
+    .text(d => d.label);
+
+  // ── Draw nodes ─────────────────────────────────────────────────────────────
+  gNodes.selectAll('*').remove();
+  const nodeSel = gNodes.selectAll('g.node').data(nodes, d=>d.id).enter()
+    .append('g')
+    .attr('class', d => d.type==='city' ? 'node node-city' : 'node node-inc')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end',   (e,d) => { if(!e.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }))
+    .on('mouseenter', (e,d) => showTooltip(e,d))
+    .on('mouseleave', hideTooltip)
+    .on('click', (e,d) => onNodeClick(e,d));
+
+  // City nodes — hexagonal ring
+  nodeSel.filter(d => d.type==='city').append('circle')
+    .attr('r', d => d.radius)
+    .attr('fill', d => d.color)
+    .attr('stroke', d => d.border)
+    .attr('stroke-width', 2)
+    .attr('filter','url(#glow)');
+
+  // City inner ring
+  nodeSel.filter(d => d.type==='city').append('circle')
+    .attr('r', d => d.radius * 0.55)
+    .attr('fill','none')
+    .attr('stroke', d => d.border)
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray','3 3')
+    .attr('opacity', 0.4);
+
+  // Incident nodes
+  nodeSel.filter(d => d.type==='incident').append('circle')
+    .attr('r', d => d.radius)
+    .attr('fill', d => d.color)
+    .attr('stroke', d => d.border)
+    .attr('stroke-width', 2.5)
+    .attr('filter', d => d.dominant_sev==='P1' ? 'url(#glow2)' : 'url(#glow)');
+
+  // P1 pulse ring
+  nodeSel.filter(d => d.dominant_sev==='P1').append('circle')
+    .attr('r', d => d.radius + 6)
+    .attr('fill','none')
+    .attr('stroke','#ff3d3d')
+    .attr('stroke-width',1)
+    .attr('opacity',0.35)
+    .attr('class','pulse-ring');
+
+  // Labels
+  if (showLabels) {
+    nodeSel.filter(d => d.type==='city').append('text')
+      .attr('class','label')
+      .attr('dy', d => d.radius + 13)
+      .text(d => d.label)
+      .attr('fill','var(--t0)')
+      .attr('font-size','11px')
+      .attr('font-weight','700')
+      .attr('font-family','var(--font)')
+      .attr('text-anchor','middle');
+
+    nodeSel.filter(d => d.type==='incident').append('text')
+      .attr('class','label')
+      .attr('dy', d => d.radius + 11)
+      .text(d => shortenLabel(d.label))
+      .attr('fill','var(--t1)')
+      .attr('font-size','8px')
+      .attr('font-family','var(--mono)')
+      .attr('text-anchor','middle');
+  }
+
+  // ── Tick ──────────────────────────────────────────────────────────────────
+  simulation.on('tick', () => {
+    edgeSel.select('line')
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+
+    edgeSel.select('text.edge-label')
+      .attr('x', d => (d.source.x + d.target.x)/2)
+      .attr('y', d => (d.source.y + d.target.y)/2);
+
+    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  applySearch(searchTerm);
+  applyVisibility();
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+function showTooltip(e, d) {
+  const tt = document.getElementById('tooltip');
+  const badge = document.getElementById('tt-badge');
+  const title = document.getElementById('tt-title');
+  const sub1  = document.getElementById('tt-sub1');
+  const sub2  = document.getElementById('tt-sub2');
+  const tdiv  = document.getElementById('tt-div');
+  const sevs  = document.getElementById('tt-sevs');
+  const SEV_C = {'P1':'#ff3d3d','P2':'#ff9933','P3':'#4da6ff','P4':'#3dd68c'};
+
+  if (d.type === 'city') {
+    badge.textContent = 'CITY CLUSTER';
+    badge.style.background = 'rgba(77,166,255,0.15)';
+    badge.style.color = '#4da6ff';
+    title.textContent = d.label;
+    sub1.textContent  = `${d.total_incidents} active incidents`;
+    sub2.textContent  = '';
+    tdiv.style.display = 'none';
+    sevs.innerHTML = '';
+  } else {
+    badge.textContent = d.dominant_sev + ' — ' + d.incident_type;
+    badge.style.background = (SEV_C[d.dominant_sev] || '#4da6ff') + '22';
+    badge.style.color = SEV_C[d.dominant_sev] || '#4da6ff';
+    title.textContent = d.label;
+    sub1.textContent  = `City: ${d.city}`;
+    sub2.textContent  = `Total count: ${d.total_count} · Weight: ${d.total_weight}`;
+    tdiv.style.display = 'block';
+    const sc = d.severity_counts || {};
+    sevs.innerHTML = Object.entries(sc).sort((a,b)=>(['P1','P2','P3','P4'].indexOf(a[0])-['P1','P2','P3','P4'].indexOf(b[0])))
+      .map(([s,c]) => `<div class="tt-sev-row"><span style="color:${SEV_C[s]}">${escHtml(s)}</span><span>${escHtml(c)} incidents (W:${c * ({P1:100,P2:60,P3:30,P4:10}[s]||0)})</span></div>`)
+      .join('');
+  }
+
+  tt.style.display = 'block';
+  const ttH = tt.offsetHeight || 200;
+  const x = Math.min(e.clientX + 14, window.innerWidth - 300);
+  const y = Math.min(e.clientY - 10, window.innerHeight - ttH - 10);
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+
+  // Highlight connected nodes
+  if (graphData) {
+    const connected = new Set([d.id]);
+    graphData.edges.forEach(e => {
+      if (e.source === d.id || e.source.id === d.id) connected.add(e.target.id || e.target);
+      if (e.target === d.id || e.target.id === d.id) connected.add(e.source.id || e.source);
+    });
+    gNodes.selectAll('g.node').classed('dimmed', n => !connected.has(n.id));
+    gLinks.selectAll('g.edge').classed('dimmed', l => {
+      const sid = l.source.id || l.source;
+      const tid = l.target.id || l.target;
+      return !(connected.has(sid) && connected.has(tid));
+    });
+  }
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+  gNodes && gNodes.selectAll('g.node').classed('dimmed', false);
+  gLinks && gLinks.selectAll('g.edge').classed('dimmed', false);
+}
+
+function onNodeClick(e, d) {
+  e.stopPropagation();
+  // Pin/unpin node
+  if (d.fx != null) { d.fx = null; d.fy = null; }
+  else { d.fx = d.x; d.fy = d.y; }
+  simulation && simulation.alphaTarget(0.1).restart();
+}
+svg && svg.on('click', hideTooltip);
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+function updateForce() {
+  ['charge','dist','gravity','coll'].forEach(k => {
+    const el = document.getElementById(`sl-${k}`);
+    document.getElementById(`v-${k}`).textContent = el.value;
+  });
+  if (!simulation || !graphData) return;
+  const charge  = +document.getElementById('sl-charge').value;
+  const dist    = +document.getElementById('sl-dist').value;
+  const gravity = +document.getElementById('sl-gravity').value;
+  const collMul = +document.getElementById('sl-coll').value;
+  simulation
+    .force('charge').strength(n => n.type==='city' ? charge*2 : charge);
+  simulation
+    .force('link').distance(l => l.type==='city_link' ? dist*0.7 : dist);
+  simulation
+    .force('x').strength(gravity);
+  simulation
+    .force('y').strength(gravity);
+  simulation
+    .force('collision').radius(n => n.radius * collMul + 4);
+  simulation.alpha(0.5).restart();
+}
+
+function toggleLabels(btn) {
+  showLabels = !showLabels;
+  btn.textContent = `⬡ Node Labels ${showLabels?'ON':'OFF'}`;
+  btn.classList.toggle('active', showLabels);
+  gNodes.selectAll('text.label').style('display', showLabels ? null : 'none');
+}
+
+function toggleWeights(btn) {
+  showWeights = !showWeights;
+  btn.textContent = `⬡ Edge Weights ${showWeights?'ON':'OFF'}`;
+  btn.classList.toggle('active', showWeights);
+  gLinks.selectAll('text.edge-label').style('display', showWeights ? null : 'none');
+}
+
+function toggleCityLinks(btn) {
+  showCityLinks = !showCityLinks;
+  btn.textContent = `⬡ City Links ${showCityLinks?'ON':'OFF'}`;
+  btn.classList.toggle('active', showCityLinks);
+  gLinks.selectAll('.edge-city-link').style('display', showCityLinks ? null : 'none');
+}
+
+function applyVisibility() {
+  if (!showLabels) gNodes.selectAll('text.label').style('display','none');
+  if (!showWeights) gLinks.selectAll('text.edge-label').style('display','none');
+  if (!showCityLinks) gLinks.selectAll('.edge-city-link').style('display','none');
+}
+
+function resetZoom() {
+  svg.transition().duration(600).call(
+    d3.zoom().transform, d3.zoomIdentity
+  );
+}
+
+function reheat() {
+  simulation && simulation.alpha(0.8).restart();
+}
+
+function setHours(btn, h) {
+  document.querySelectorAll('.hours-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeHours = h;
+  loadData();
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+function onSearch(val) {
+  searchTerm = (val || '').toLowerCase().trim();
+  applySearch(searchTerm);
+}
+
+function applySearch(term) {
+  if (!gNodes) return;
+  if (!term) {
+    gNodes.selectAll('g.node').classed('dimmed', false);
+    gLinks.selectAll('g.edge').classed('dimmed', false);
+    return;
+  }
+  const matched = new Set();
+  gNodes.selectAll('g.node').each(d => {
+    if ((d.label||'').toLowerCase().includes(term) ||
+        (d.city||'').toLowerCase().includes(term)) {
+      matched.add(d.id);
+    }
+  });
+  // Also include connected nodes
+  if (graphData) {
+    const extra = new Set(matched);
+    graphData.edges.forEach(e => {
+      const sid = e.source.id||e.source, tid = e.target.id||e.target;
+      if (matched.has(sid)) extra.add(tid);
+      if (matched.has(tid)) extra.add(sid);
+    });
+    gNodes.selectAll('g.node').classed('dimmed', d => !extra.has(d.id));
+    gLinks.selectAll('g.edge').classed('dimmed', l => {
+      const sid = l.source.id||l.source, tid = l.target.id||l.target;
+      return !extra.has(sid) || !extra.has(tid);
+    });
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats(data) {
+  const cities  = data.nodes.filter(n => n.type==='city').length;
+  const types   = data.nodes.filter(n => n.type==='incident').length;
+  const edges   = data.edges.filter(e => e.type==='incident_link').length;
+  const weight  = data.nodes.filter(n=>n.type==='incident').reduce((s,n)=>s+(n.total_weight||0),0);
+  document.getElementById('st-cities').textContent  = cities;
+  document.getElementById('st-types').textContent   = types;
+  document.getElementById('st-edges').textContent   = edges;
+  document.getElementById('st-weight').textContent  = weight.toLocaleString();
+  document.getElementById('st-src').textContent     = data.meta.source === 'demo' ? 'DEMO' : 'LIVE DB';
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function shortenLabel(s) {
+  const map = {
+    'Vehicle Accident':'Vehicle','Medical Emergency':'Medical',
+    'Suspicious Activity':'Suspicious','Natural Disaster':'Natural',
+    'Missing Person':'Missing','Major Traffic':'Traffic',
+  };
+  return map[s] || s;
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US',{hour12:false,timeZone:'America/Chicago'}) + ' CDT';
+}
+
+// ── Error banner ──────────────────────────────────────────────────────────────
+function showError(msg) {
+  let el = document.getElementById('err-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'err-banner';
+    el.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:300;background:rgba(255,50,50,0.12);border:1px solid rgba(255,50,50,0.35);border-radius:6px;padding:7px 18px;font-family:var(--mono);font-size:11px;color:#ff6b6b;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  if (!msg) { el.style.display = 'none'; return; }
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── HTML escape ───────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const r = await fetch(`${API}/api/graph?hours=${activeHours}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    showError(null);
+    render(d);
+  } catch(e) {
+    console.error('Load error:', e);
+    showError('Cannot reach server — retrying…');
+  }
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let ws = null;
+let wsRetryDelay = 1000;
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => { wsRetryDelay = 1000; };
+  ws.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'graph_init' || msg.event === 'graph_update') {
+        render(msg.data);
+      }
+    } catch(err) {
+      console.error('WS message parse error:', err);
+    }
+  };
+  ws.onclose = () => {
+    wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
+    setTimeout(connectWS, wsRetryDelay);
+  };
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    initSVG();
+    if (graphData) render(graphData);
+  }, 150);
+});
+
+initSVG();
+connectWS();
+loadData();
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+</body>
+</html>

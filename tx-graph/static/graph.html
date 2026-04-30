@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TX Safety — Incident Network Graph</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg0:#050709;--bg1:#080c10;--bg2:#0d1318;--bg3:#121b24;--bg4:#18232e;
+  --border:rgba(0,180,255,0.12);--border-hi:rgba(0,200,255,0.35);
+  --t0:#c8dff0;--t1:#7fa8c4;--t2:#3d6480;--t3:#1e3347;
+  --accent:#00c8ff;--accent2:#00ff9d;--warn:#ff8c00;--danger:#ff3333;
+  --font:'Rajdhani',sans-serif;--mono:'Share Tech Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg0);color:var(--t0);font-family:var(--font)}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9000;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.05) 3px,rgba(0,0,0,0.05) 4px)}
+#hdr{position:fixed;top:0;left:0;right:0;height:48px;z-index:200;
+  background:rgba(5,7,9,0.96);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:14px;backdrop-filter:blur(8px)}
+.hdr-logo{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:.2em;
+  text-shadow:0 0 12px rgba(0,200,255,0.5);white-space:nowrap}
+.hdr-sep{width:1px;height:24px;background:var(--border)}
+.hdr-title{font-size:16px;font-weight:600;letter-spacing:.04em}
+.hdr-sub{font-size:10px;color:var(--t2);font-family:var(--mono)}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.stat-chip{font-family:var(--mono);font-size:10px;padding:3px 9px;
+  border:1px solid var(--border);border-radius:2px;background:rgba(0,200,255,0.05);color:var(--t1)}
+.stat-chip span{color:var(--accent);font-weight:600}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);
+  box-shadow:0 0 8px var(--accent2);animation:pg 1.8s ease-in-out infinite}
+@keyframes pg{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.7)}}
+
+#panel{position:fixed;top:48px;left:0;bottom:0;width:256px;z-index:150;
+  background:rgba(8,12,16,0.97);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;backdrop-filter:blur(6px)}
+.ps{border-bottom:1px solid var(--border);padding:11px 13px;flex-shrink:0}
+.sl{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.18em;
+  color:var(--t2);text-transform:uppercase;margin-bottom:8px}
+.cr{display:flex;flex-direction:column;gap:5px;margin-bottom:5px}
+.cl{font-size:11px;color:var(--t1);margin-bottom:1px;display:flex;justify-content:space-between}
+.cl span{font-family:var(--mono);color:var(--accent);font-size:10px}
+input[type=range]{width:100%;height:3px;-webkit-appearance:none;appearance:none;
+  background:var(--bg4);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;
+  border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px var(--accent)}
+select{width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--t0);
+  font-family:var(--mono);font-size:11px;padding:5px 8px;border-radius:2px;outline:none}
+select:focus{border-color:var(--border-hi)}
+select option{background:var(--bg2)}
+.br{display:flex;gap:5px;margin-top:4px}
+.cb{flex:1;font-family:var(--mono);font-size:10px;font-weight:600;padding:6px 8px;
+  border:1px solid var(--border);border-radius:2px;background:transparent;
+  color:var(--t1);cursor:pointer;letter-spacing:.05em;transition:all .15s;text-transform:uppercase}
+.cb:hover{border-color:var(--border-hi);color:var(--t0);background:rgba(0,200,255,0.06)}
+.cb.pri{border-color:rgba(0,200,255,.4);color:var(--accent);background:rgba(0,200,255,0.08)}
+.cb.pri:hover{background:rgba(0,200,255,0.15)}
+.cb.dng{border-color:rgba(255,50,50,.3);color:var(--danger)}
+.sv{display:flex;flex-direction:column;gap:5px}
+.sv-row{display:flex;align-items:center;gap:7px;font-size:11px}
+.sv-line{flex:1;border-radius:1px}
+
+#cluster-list{overflow-y:auto;max-height:180px;scrollbar-width:thin;scrollbar-color:var(--bg4) transparent}
+.ci{display:flex;align-items:center;justify-content:space-between;
+  padding:5px 13px;border-bottom:1px solid rgba(0,180,255,0.04);
+  cursor:pointer;transition:background .1s;font-size:11px}
+.ci:hover{background:var(--bg3)}
+.ci.active{background:rgba(0,200,255,0.08);border-left:2px solid var(--accent);padding-left:11px}
+.ci-city{color:var(--t1);font-weight:500}
+.ci-w{font-family:var(--mono);font-size:10px;color:var(--accent)}
+#legend-list{overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:var(--bg4) transparent}
+.li{display:flex;align-items:center;gap:7px;padding:4px 13px;cursor:pointer;transition:background .1s;font-size:11px}
+.li:hover{background:var(--bg3)}
+.li.dim{opacity:.2}
+.ld{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ln{flex:1;font-size:11px;color:var(--t1)}
+.lc{font-family:var(--mono);font-size:10px;color:var(--t2)}
+
+#canvas{position:fixed;top:48px;left:256px;right:0;bottom:0;background:var(--bg0);overflow:hidden}
+#svg-g{width:100%;height:100%}
+.edge{stroke-opacity:.45;transition:stroke-opacity .2s}
+.edge.hl{stroke-opacity:1;filter:drop-shadow(0 0 3px currentColor)}
+.edge.dim{stroke-opacity:.04}
+.ng{cursor:grab}.ng:active{cursor:grabbing}
+.nc{stroke-width:1.5;fill-opacity:0.82;transition:all .2s;filter:drop-shadow(0 0 5px currentColor)}
+.nc.hl{fill-opacity:1;stroke-width:2.5;filter:drop-shadow(0 0 14px currentColor)}
+.nc.dim{fill-opacity:.1;filter:none}
+.nlb{font-family:var(--font);font-weight:600;fill:var(--t0);pointer-events:none;
+  paint-order:stroke;stroke:var(--bg0);stroke-width:3px}
+.nct{font-family:var(--mono);font-size:9px;fill:var(--t2);pointer-events:none;
+  paint-order:stroke;stroke:var(--bg0);stroke-width:2px}
+.nco{font-family:var(--mono);fill:rgba(255,255,255,0.75);pointer-events:none}
+.hull{fill-opacity:.04;stroke-opacity:.12;stroke-width:2;stroke-dasharray:5 3}
+
+#tt{position:fixed;display:none;z-index:500;background:rgba(8,12,16,0.97);
+  border:1px solid var(--border-hi);border-radius:3px;padding:10px 13px;
+  pointer-events:none;max-width:270px;backdrop-filter:blur(8px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.7)}
+.tt-lbl{font-family:var(--mono);font-size:9px;color:var(--accent);letter-spacing:.1em;margin-bottom:3px}
+.tt-hd{font-size:14px;font-weight:600;margin-bottom:6px;line-height:1.2}
+.tt-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.tt-it{background:var(--bg3);border-radius:2px;padding:5px 8px}
+.tt-k{font-family:var(--mono);font-size:8px;color:var(--t2);letter-spacing:.07em;margin-bottom:2px}
+.tt-v{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--t0)}
+
+#info{position:fixed;bottom:14px;right:14px;z-index:300;font-family:var(--mono);
+  font-size:10px;color:var(--t3);text-align:right;line-height:1.9;pointer-events:none}
+#zl{color:var(--t2)}
+
+#ls{position:fixed;inset:0;background:var(--bg0);z-index:9999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+.lr{width:56px;height:56px;border:2px solid var(--bg4);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.lt{font-family:var(--mono);font-size:11px;color:var(--t2);letter-spacing:.14em}
+#es{position:fixed;inset:0;background:var(--bg0);z-index:9998;display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.ec{font-family:var(--mono);font-size:44px;color:var(--danger);letter-spacing:.1em}
+.em{font-family:var(--mono);font-size:12px;color:var(--t1);max-width:460px;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div id="ls"><div class="lr"></div><div class="lt">INITIALIZING THREAT NETWORK...</div></div>
+<div id="es">
+  <div class="ec">503</div>
+  <div class="em" id="em">Database not found.</div>
+  <div style="font-family:var(--mono);font-size:11px;color:var(--t2)" id="ef"></div>
+</div>
+
+<div id="hdr">
+  <div class="hdr-logo">TX-SAFE</div>
+  <div class="hdr-sep"></div>
+  <div>
+    <div class="hdr-title">Incident Network Graph</div>
+    <div class="hdr-sub">Force-Directed · Nodes=Incident Type · Edges=Co-occurrence Weight · Clusters=City</div>
+  </div>
+  <div class="hdr-right">
+    <div class="stat-chip">Nodes <span id="hn">—</span></div>
+    <div class="stat-chip">Edges <span id="he">—</span></div>
+    <div class="stat-chip">Cities <span id="hc">—</span></div>
+    <div class="stat-chip">Incidents <span id="hi">—</span></div>
+    <div class="live-dot"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="ps">
+    <div class="sl">Controls</div>
+    <div class="cr">
+      <div class="cl">Time window <span id="hv">24h</span></div>
+      <input type="range" id="hs" min="1" max="168" value="24"
+             oninput="document.getElementById('hv').textContent=this.value+'h'">
+    </div>
+    <div class="cr">
+      <div class="cl">Min edge weight <span id="wv">1</span></div>
+      <input type="range" id="ws" min="1" max="100" value="1"
+             oninput="document.getElementById('wv').textContent=this.value">
+    </div>
+    <div class="cr">
+      <div class="cl">Link distance <span id="lv">80</span></div>
+      <input type="range" id="ls2" min="10" max="300" value="80"
+             oninput="document.getElementById('lv').textContent=this.value;uf()">
+    </div>
+    <div class="cr">
+      <div class="cl">Charge repulsion <span id="cv">-300</span></div>
+      <input type="range" id="cs" min="-1200" max="-50" value="-300"
+             oninput="document.getElementById('cv').textContent=this.value;uf()">
+    </div>
+    <div class="cr" style="margin-bottom:0">
+      <div class="cl">City filter</div>
+      <select id="cf" onchange="reload()"><option value="">All cities</option></select>
+    </div>
+    <div class="br">
+      <button class="cb pri" onclick="reload()">↻ Reload</button>
+      <button class="cb" onclick="rz()">⊡ Reset</button>
+      <button class="cb dng" onclick="clrHL()">✕ Clear</button>
+    </div>
+  </div>
+
+  <div class="ps">
+    <div class="sl">Severity → Edge Weight</div>
+    <div class="sv">
+      <div class="sv-row"><span style="font-family:var(--mono);font-size:9px;color:#ff4d4d;width:16px">P1</span>
+        <div class="sv-line" style="background:#ff4d4d;height:7px;box-shadow:0 0 5px #ff4d4d;border-radius:1px"></div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">Critical ×100</span></div>
+      <div class="sv-row"><span style="font-family:var(--mono);font-size:9px;color:#ff8c42;width:16px">P2</span>
+        <div class="sv-line" style="background:#ff8c42;height:4px;border-radius:1px"></div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">High ×60</span></div>
+      <div class="sv-row"><span style="font-family:var(--mono);font-size:9px;color:#4da6ff;width:16px">P3</span>
+        <div class="sv-line" style="background:#4da6ff;height:2px;border-radius:1px"></div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">Medium ×30</span></div>
+      <div class="sv-row"><span style="font-family:var(--mono);font-size:9px;color:#40c97e;width:16px">P4</span>
+        <div class="sv-line" style="background:#40c97e;height:1px;border-radius:1px"></div>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">Low ×10</span></div>
+    </div>
+  </div>
+
+  <div class="ps" style="flex-shrink:0">
+    <div class="sl">City Clusters <small style="color:var(--t3)">(click to highlight)</small></div>
+    <div id="cluster-list"></div>
+  </div>
+
+  <div class="ps" style="padding-bottom:0;flex-shrink:0">
+    <div class="sl">Incident Types <small style="color:var(--t3)">(click to highlight)</small></div>
+  </div>
+  <div id="legend-list"></div>
+</div>
+
+<div id="canvas"><svg id="svg-g"></svg></div>
+<div id="tt"></div>
+<div id="info">
+  <div>Scroll to zoom · Drag canvas to pan</div>
+  <div>Drag any node to reposition</div>
+  <div>Zoom: <span id="zl">100%</span></div>
+</div>
+
+<script>
+let gdata=null,sim=null,svgEl,gEl,zb;
+let hlType=null,hlCity=null,nmap={};
+const W=()=>document.getElementById('canvas').clientWidth;
+const H=()=>document.getElementById('canvas').clientHeight;
+
+async function boot(){
+  await loadCities();
+  await loadAndRender();
+  setInterval(loadAndRender,60000);
+}
+
+async function loadCities(){
+  try{
+    const r=await fetch('/api/graph/cities?hours=24');
+    const cities=await r.json();
+    const sel=document.getElementById('cf');
+    (cities||[]).forEach(c=>{
+      const o=document.createElement('option');
+      o.value=c.city; o.textContent=`${c.city} (${c.n})`;
+      sel.appendChild(o);
+    });
+  }catch(e){}
+}
+
+async function loadAndRender(){
+  const hours=document.getElementById('hs').value;
+  const minW=document.getElementById('ws').value;
+  const city=document.getElementById('cf').value;
+  const p=new URLSearchParams({hours,min_weight:minW});
+  if(city) p.set('city_filter',city);
+  try{
+    const r=await fetch(`/api/graph?${p}`);
+    const data=await r.json();
+    if(data.error){showErr(data.error,data.fix||'');return;}
+    document.getElementById('ls').style.display='none';
+    gdata=data;
+    updHdr(data.stats);
+    renderLegend(data.nodes);
+    renderClusters(data.clusters);
+    renderGraph(data);
+  }catch(e){showErr('Cannot reach server on port 8009','Run: bash scripts/start.sh');}
+}
+
+function showErr(msg,fix){
+  document.getElementById('ls').style.display='none';
+  document.getElementById('es').style.display='flex';
+  document.getElementById('em').textContent=msg;
+  document.getElementById('ef').textContent=fix;
+}
+function reload(){loadAndRender();}
+
+function updHdr(s){
+  document.getElementById('hn').textContent=s.total_nodes||0;
+  document.getElementById('he').textContent=s.total_edges||0;
+  document.getElementById('hc').textContent=s.cities||0;
+  document.getElementById('hi').textContent=s.total_incidents||0;
+}
+
+function renderGraph(data){
+  const {nodes,edges}=data;
+  d3.select('#svg-g').selectAll('*').remove();
+  if(!nodes.length)return;
+  const w=W(),h=H();
+  svgEl=d3.select('#svg-g').attr('width',w).attr('height',h);
+  zb=d3.zoom().scaleExtent([0.08,10]).on('zoom',e=>{
+    gEl.attr('transform',e.transform);
+    document.getElementById('zl').textContent=Math.round(e.transform.k*100)+'%';
+  });
+  svgEl.call(zb);
+  svgEl.on('click',e=>{if(e.target===svgEl.node()||e.target.tagName==='rect') clrHL();});
+  svgEl.append('rect').attr('width',w).attr('height',h).attr('fill','transparent');
+
+  const defs=svgEl.append('defs');
+  const fl=defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%')
+    .attr('width','200%').attr('height','200%');
+  fl.append('feGaussianBlur').attr('stdDeviation','5').attr('result','b');
+  fl.append('feMerge').selectAll('n').data(['b','SourceGraphic']).join('feMergeNode').attr('in',d=>d);
+
+  gEl=svgEl.append('g');
+  nmap={};
+  nodes.forEach(n=>{nmap[n.id]=n;});
+
+  // City color map
+  const cities=[...new Set(nodes.map(n=>n.city))];
+  const cityCol={};
+  cities.forEach((c,i)=>{cityCol[c]=d3.hsl((i*53)%360,0.55,0.38).formatHex();});
+
+  // Seed positions — radial city clusters
+  const cp={};
+  cities.forEach((c,i)=>{
+    const a=(i/cities.length)*Math.PI*2;
+    const r=Math.min(w,h)*0.28;
+    cp[c]={x:w/2+Math.cos(a)*r, y:h/2+Math.sin(a)*r};
+  });
+  nodes.forEach(n=>{
+    const c=cp[n.city]||{x:w/2,y:h/2};
+    n.x=c.x+(Math.random()-.5)*100;
+    n.y=c.y+(Math.random()-.5)*100;
+  });
+
+  // Edge color: low weight = dark blue-grey, high weight = red
+  const ecs=d3.scaleSequential().domain([0,1]).interpolator(d3.interpolateRgb('#1c2e40','#ff3333'));
+
+  const hullG=gEl.append('g');
+  const edgeG=gEl.append('g');
+  const nodeG=gEl.append('g');
+
+  // Edges
+  const edgeSel=edgeG.selectAll('.edge').data(edges).join('line')
+    .attr('class','edge')
+    .attr('stroke',d=>ecs(d.norm_weight))
+    .attr('stroke-width',d=>d.width)
+    .on('mouseenter',(e,d)=>showEdgeTip(e,d))
+    .on('mouseleave',hideTip);
+
+  // Nodes
+  const nodeSel=nodeG.selectAll('.ng').data(nodes).join('g')
+    .attr('class','ng')
+    .call(d3.drag()
+      .on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+      .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;})
+      .on('end',  (e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;})
+    )
+    .on('mouseenter',(e,d)=>showNodeTip(e,d))
+    .on('mouseleave',hideTip)
+    .on('click',(e,d)=>{e.stopPropagation();hlType=(hlType===d.type)?null:d.type;applyHL();});
+
+  nodeSel.append('circle').attr('class','nc')
+    .attr('r',d=>d.radius)
+    .attr('fill',d=>d.color)
+    .attr('stroke',d=>{const c=d3.color(d.color);return c?c.brighter(1.8).formatHex():'#fff';});
+
+  nodeSel.append('text').attr('class','nco')
+    .attr('text-anchor','middle').attr('dy','0.35em')
+    .attr('font-size',d=>Math.max(8,Math.min(d.radius*0.52,16)))
+    .text(d=>d.count>0?d.count:'');
+
+  nodeSel.append('text').attr('class','nlb')
+    .attr('text-anchor','middle')
+    .attr('dy',d=>d.radius+12)
+    .attr('font-size',d=>Math.max(9,Math.min(d.radius*0.44,13)))
+    .text(d=>abbr(d.type));
+
+  nodeSel.append('text').attr('class','nct')
+    .attr('text-anchor','middle')
+    .attr('dy',d=>d.radius+23)
+    .text(d=>d.city!=='Unknown'?d.city:'');
+
+  // Force simulation
+  const ld=+document.getElementById('ls2').value;
+  const ch=+document.getElementById('cs').value;
+
+  if (sim) sim.stop();
+  sim=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(edges).id(d=>d.id)
+      .distance(d=>ld+(1-d.norm_weight)*60).strength(d=>0.3+d.norm_weight*0.5))
+    .force('charge',d3.forceManyBody().strength(ch))
+    .force('center',d3.forceCenter(w/2,h/2))
+    .force('collide',d3.forceCollide().radius(d=>d.radius+20))
+    .force('cluster',alpha=>{
+      nodes.forEach(n=>{
+        const c=cp[n.city];if(!c)return;
+        n.vx+=(c.x-n.x)*0.06*alpha;
+        n.vy+=(c.y-n.y)*0.06*alpha;
+      });
+    })
+    .on('tick',()=>{
+      edgeSel.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+             .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+      nodeSel.attr('transform',d=>`translate(${d.x},${d.y})`);
+      if(sim.alpha()<0.25) updHulls();
+    });
+
+  function updHulls(){
+    const byCity={};
+    nodes.forEach(n=>{(byCity[n.city]||(byCity[n.city]=[])).push([n.x,n.y]);});
+    hullG.selectAll('.hull').remove();
+    Object.entries(byCity).forEach(([city,pts])=>{
+      if(pts.length<3)return;
+      try{
+        const hull=d3.polygonHull(pts);if(!hull)return;
+        const cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;
+        const cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;
+        const padded=hull.map(p=>{
+          const dx=p[0]-cx,dy=p[1]-cy,dist=Math.sqrt(dx*dx+dy*dy)||1;
+          return[p[0]+dx/dist*34,p[1]+dy/dist*34];
+        });
+        hullG.append('path').attr('class','hull')
+          .attr('d',`M${padded.join('L')}Z`)
+          .attr('fill',cityCol[city]||'#334')
+          .attr('stroke',cityCol[city]||'#334');
+      }catch(e){}
+    });
+  }
+}
+
+function uf(){
+  if(!sim)return;
+  const ld=+document.getElementById('ls2').value;
+  const ch=+document.getElementById('cs').value;
+  sim.force('link').distance(d=>ld+(1-d.norm_weight)*60);
+  sim.force('charge',d3.forceManyBody().strength(ch));
+  sim.alpha(0.4).restart();
+}
+
+function rz(){svgEl.transition().duration(600).call(zb.transform,d3.zoomIdentity);}
+
+function applyHL(){
+  const isHL=hlType!==null||hlCity!==null;
+  d3.selectAll('.nc')
+    .classed('hl',d=>isHL?(hlType?d.type===hlType:d.city===hlCity):false)
+    .classed('dim',d=>isHL?(hlType?d.type!==hlType:d.city!==hlCity):false);
+  d3.selectAll('.edge')
+    .classed('hl',d=>isHL?(hlType?
+      (d.source.type===hlType||d.target.type===hlType):d.city===hlCity):false)
+    .classed('dim',d=>isHL?!(hlType?
+      (d.source.type===hlType||d.target.type===hlType):d.city===hlCity):false);
+  d3.selectAll('.li').classed('dim',d=>isHL&&hlType?d.type!==hlType:false);
+  d3.selectAll('.ci').classed('active',d=>hlCity?d.city===hlCity:false);
+}
+
+function clrHL(){hlType=null;hlCity=null;applyHL();}
+
+function renderLegend(nodes){
+  const tm={};
+  nodes.forEach(n=>{
+    if(!tm[n.type])tm[n.type]={count:0,color:n.color,weight:0,type:n.type};
+    tm[n.type].count+=n.count;tm[n.type].weight+=n.weight;
+  });
+  const sorted=Object.values(tm).sort((a,b)=>b.weight-a.weight);
+  document.getElementById('legend-list').innerHTML=sorted.map(t=>`
+    <div class="li" onclick="hlType=(hlType==='${esc(t.type)}')?null:'${esc(t.type)}';applyHL();" data-type="${esc(t.type)}">
+      <div class="ld" style="background:${t.color};box-shadow:0 0 5px ${t.color}"></div>
+      <div class="ln">${abbr(t.type,20)}</div>
+      <div class="lc">${t.count}</div>
+    </div>`).join('');
+}
+
+function renderClusters(clusters){
+  document.getElementById('cluster-list').innerHTML=clusters.slice(0,20).map(c=>`
+    <div class="ci" onclick="hlCity=(hlCity==='${esc(c.city)}')?null:'${esc(c.city)}';applyHL();">
+      <div class="ci-city">${c.city}</div>
+      <div class="ci-w">${Math.round(c.weight)}</div>
+    </div>`).join('');
+}
+
+function showNodeTip(event,d){
+  document.getElementById('tt').innerHTML=`
+    <div class="tt-lbl">INCIDENT NODE · ${d.city}</div>
+    <div class="tt-hd" style="color:${d.color}">${d.type}</div>
+    <div class="tt-grid">
+      <div class="tt-it"><div class="tt-k">INCIDENTS</div><div class="tt-v">${d.count}</div></div>
+      <div class="tt-it"><div class="tt-k">SEV WEIGHT</div><div class="tt-v">${Math.round(d.weight)}</div></div>
+      <div class="tt-it"><div class="tt-k">NODE RADIUS</div><div class="tt-v">${Math.round(d.radius)}px</div></div>
+      <div class="tt-it"><div class="tt-k">CITY CLUSTER</div><div class="tt-v" style="font-size:10px">${d.city}</div></div>
+    </div>`;
+  posTip(event);
+}
+
+function showEdgeTip(event,d){
+  const s=typeof d.source==='object'?d.source:nmap[d.source];
+  const t=typeof d.target==='object'?d.target:nmap[d.target];
+  document.getElementById('tt').innerHTML=`
+    <div class="tt-lbl">EDGE · CO-OCCURRENCE · ${d.city}</div>
+    <div class="tt-grid" style="grid-template-columns:1fr;gap:4px">
+      <div class="tt-it" style="border-left:3px solid ${s?.color||'#333'}">
+        <div class="tt-k">TYPE A</div><div class="tt-v" style="color:${s?.color||'#fff'}">${s?.type||'?'}</div></div>
+      <div class="tt-it" style="border-left:3px solid ${t?.color||'#333'}">
+        <div class="tt-k">TYPE B</div><div class="tt-v" style="color:${t?.color||'#fff'}">${t?.type||'?'}</div></div>
+      <div class="tt-it"><div class="tt-k">COMBINED WEIGHT</div><div class="tt-v" style="color:#ff8c42">${Math.round(d.weight)}</div></div>
+    </div>`;
+  posTip(event);
+}
+
+function posTip(e){
+  const tt=document.getElementById('tt');
+  tt.style.display='block';
+  const x=e.clientX+14,y=e.clientY-10;
+  const tw=tt.offsetWidth,th=tt.offsetHeight;
+  tt.style.left=(x+tw>window.innerWidth?x-tw-28:x)+'px';
+  tt.style.top=(y+th>window.innerHeight?y-th:y)+'px';
+}
+function hideTip(){document.getElementById('tt').style.display='none';}
+
+const ABBR={'Vehicle Accident':'Vehicle Acc.','Medical Emergency':'Medical Emrg.',
+  'Suspicious Activity':'Suspicious','Natural Disaster':'Nat. Disaster',
+  'Physical Security Threat':'Phys. Security','Cybersecurity Threat':'Cyber Threat',
+  'Crowd Intelligence':'Crowd Intel','Armament / Weapons':'Armament',
+  'Person of Interest':'POI','Theft / Trafficking':'Theft/Traff.',
+  'Drug Trafficking':'Drug Traff.','Human Trafficking':'Human Traff.',
+  'Infrastructure Attack':'Infra. Attack','Extremist Activity':'Extremism',
+  'Gang Activity':'Gang Activity','Terrorism Threat':'Terrorism',
+  'Data Breach / Doxxing':'Data Breach','Other Dark Web Threat':'Dark Web'};
+
+function abbr(s,max=16){const a=ABBR[s]||s;return a.length>max?a.slice(0,max-1)+'…':a;}
+function esc(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+window.addEventListener('resize',()=>{if(gdata)renderGraph(gdata);});
+boot();
+</script>
+</body>
+</html>
