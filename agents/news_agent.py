@@ -47,6 +47,8 @@ RSS_FEEDS = [
     ("KAMR Amarillo",             "https://www.myhighplains.com/feed/"),
     ("KETK Tyler",                "https://www.ketk.com/feed/"),
     ("Beaumont Enterprise",       "https://www.beaumontenterprise.com/feed/"),
+    # ── Rio Grande Valley / Brownsville ──────────────────────────────────────
+    ("ValleyCentral RGV",         "https://www.valleycentral.com/news/local-news/feed/"),
 ]
 
 SAFETY_KEYWORDS = [

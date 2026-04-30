@@ -31,6 +31,8 @@ NOAA_FEEDS = [
     ("NOAA Corpus Christi (CRP)","https://alerts.weather.gov/cap/wfo/crp.php?x=0"),
     ("NOAA Midland (MAF)",       "https://alerts.weather.gov/cap/wfo/maf.php?x=0"),
     ("NOAA Austin/San Angelo (SJT)","https://alerts.weather.gov/cap/wfo/sjt.php?x=0"),
+    # ── Rio Grande Valley / Brownsville ──────────────────────────────────────
+    ("NOAA Brownsville (BRO)",     "https://alerts.weather.gov/cap/wfo/bro.php?x=0"),
 ]
 
 _seen: set[str] = set()
