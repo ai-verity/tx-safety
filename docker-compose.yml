@@ -46,7 +46,7 @@ services:
     command: >
       --model Qwen/Qwen3-32B
       --port 8001
-      --tensor-parallel-size 3
+      --tensor-parallel-size 2
       --max-model-len 8192
       --gpu-memory-utilization 0.90
     deploy:
@@ -54,7 +54,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 3
+              count: 2
               capabilities: [gpu]
     ports:
       - "8001:8001"
