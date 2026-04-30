@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.git/
+tx-graph/
+{static,core}
+{static,data}
